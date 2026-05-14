@@ -85,15 +85,13 @@ export function startWatcher(onDbChange?: () => void) {
           let hasText = false;
           let extractedText = '';
           try {
-            const parser = new (pdfParse as any).PDFParse({ data: dataBuffer });
-            const pdfData = await parser.getText();
-            await parser.destroy();
-            
-            extractedText = pdfData.text;
-            hasText = !!extractedText && extractedText.trim().length > 50;
-            console.log(`[Sync] Text extraction for ${hash}: ${extractedText?.trim().length || 0} chars. hasText: ${hasText}`);
+            // pdf-parse is a function, not a class
+            const pdfData = await pdfParse(dataBuffer);
+            extractedText = pdfData.text || '';
+            hasText = extractedText.trim().length > 50;
+            console.log(`[Sync] Text extraction for ${hash}: ${extractedText.trim().length} chars. hasText: ${hasText}`);
           } catch (e) {
-            console.error("[Sync] Fehler beim Parsen der PDF", e);
+            console.error('[Sync] Fehler beim Parsen der PDF', e);
           }
 
           // Speichere in DB (noch im Inbox-Pfad)
@@ -219,9 +217,10 @@ export async function runHashCrawler() {
 
 /**
  * Scans the database for documents that need OCR or AI analysis and processes them.
+ * Also resets stuck processing states for docs in Sortieren.
  */
 export async function processPendingDocuments(onDbChange?: () => void) {
-    console.log("Checking for pending OCR or AI tasks...");
+    console.log('Checking for pending OCR or AI tasks...');
     const docs = getAllDocuments();
     const config = getConfig();
 
@@ -233,9 +232,18 @@ export async function processPendingDocuments(onDbChange?: () => void) {
             metadata = {};
         }
 
-        // Only process documents that are not yet fully processed and are in Inbox
         const isInBox = doc.last_path.startsWith(config.INBOX_PATH);
+        const isInSortieren = doc.last_path.startsWith(config.PROCESSING_PATH);
 
+        // Reset stuck processing states for docs already in Sortieren
+        if (isInSortieren && (doc.status === 'ocr_processing' || doc.status === 'ai_processing')) {
+            console.log(`[Sync] Resetting stuck status '${doc.status}' for ${doc.hash} in Sortieren`);
+            updateDocumentStatus(doc.hash, 'new');
+            if (onDbChange) onDbChange();
+            continue;
+        }
+
+        // Only process inbox docs that need OCR or had an error
         if (isInBox && (metadata.needsOcr || doc.status === 'error')) {
             console.log(`Auto-starting OCR for pending document: ${doc.hash}`);
             try {
@@ -245,9 +253,9 @@ export async function processPendingDocuments(onDbChange?: () => void) {
                 const extractedText = await performOCR(doc.last_path);
                 if (extractedText && extractedText.trim().length > 50) {
                     console.log(`Auto-OCR successful for ${doc.hash}`);
-                    updateDocumentMetadata(doc.hash, doc.tags, JSON.stringify({ ...metadata, needsOcr: false }), doc.status);
+                    updateDocumentMetadata(doc.hash, doc.tags, JSON.stringify({ ...metadata, needsOcr: false }), 'new');
                     if (onDbChange) onDbChange();
-                    
+
                     // Trigger AI analysis after successful OCR
                     console.log(`Triggering AI analysis for ${doc.hash} after Auto-OCR`);
                     updateDocumentStatus(doc.hash, 'ai_processing');
@@ -262,19 +270,29 @@ export async function processPendingDocuments(onDbChange?: () => void) {
                             docType: aiResult.docType || '',
                             needsOcr: false
                         });
-                        updateDocumentMetadata(doc.hash, tags, newMetadata, doc.status);
+                        updateDocumentMetadata(doc.hash, tags, newMetadata, 'new');
+                        // Auto-move to Sortieren after successful processing
+                        const fileName = path.basename(doc.last_path);
+                        const processingPath = path.join(config.PROCESSING_PATH, fileName);
+                        try {
+                            await fs.rename(doc.last_path, processingPath);
+                            updateDocumentPath(doc.hash, processingPath);
+                            console.log(`[Sync] Pending doc processed and moved to Sortieren: ${processingPath}`);
+                        } catch (moveErr) {
+                            console.error(`[Sync] Failed to move processed doc to Sortieren`, moveErr);
+                        }
                         if (onDbChange) onDbChange();
                     } else {
-                        updateDocumentStatus(doc.hash, doc.status); // reset
+                        updateDocumentStatus(doc.hash, 'error');
                         if (onDbChange) onDbChange();
                     }
                 } else {
-                    updateDocumentStatus(doc.hash, doc.status); // reset
+                    updateDocumentStatus(doc.hash, 'error');
                     if (onDbChange) onDbChange();
                 }
             } catch (e) {
                 console.error(`Auto-OCR failed for ${doc.hash}`, e);
-                updateDocumentStatus(doc.hash, doc.status); // reset
+                updateDocumentStatus(doc.hash, 'error');
                 if (onDbChange) onDbChange();
             }
         }

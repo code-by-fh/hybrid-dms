@@ -2,7 +2,7 @@ import { app, BrowserWindow, ipcMain, dialog } from 'electron';
 import path from 'path';
 import fs from 'fs/promises';
 import { fileURLToPath } from 'url';
-import { initDb, getAllDocuments, getSetting, setSetting, getDocumentByHash, updateDocumentMetadata, updateDocumentPath } from './db/index.js';
+import { initDb, getAllDocuments, getSetting, setSetting, getDocumentByHash, updateDocumentMetadata, updateDocumentPath, updateDocumentStatus } from './db/index.js';
 import { startWatcher, runHashCrawler, getConfig, processPendingDocuments } from './services/syncEngine.js';
 import { checkOllamaStatus, analyzeDocumentWithAI } from './services/aiService.js';
 import { performOCR } from './services/ocrService.js';
@@ -139,6 +139,8 @@ ipcMain.handle('move-to-processing', async (event, hash) => {
 
         await fs.rename(doc.last_path, targetPath);
         updateDocumentPath(hash, targetPath);
+        // Reset any stuck processing status so Sortieren shows a clean state
+        updateDocumentStatus(hash, 'new');
 
         return { success: true };
     } catch (err) {
