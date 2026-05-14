@@ -97,24 +97,24 @@ export const Sidebar: React.FC<SidebarProps> = ({ document, isInbox, isArchive, 
   const fileName = document.last_path.split(/[\\/]/).pop() ?? '';
 
   const inputClass =
-    'w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg focus:bg-white focus:ring-2 focus:ring-blue-100 focus:border-blue-400 outline-none transition-all disabled:opacity-50 disabled:cursor-not-allowed text-sm';
+    'w-full px-3 py-2 bg-bg-app border border-border-base rounded-lg focus:bg-bg-surface focus:ring-2 focus:ring-accent-primary/20 focus:border-accent-primary outline-none transition-all disabled:opacity-50 disabled:cursor-not-allowed text-sm text-text-main';
 
   return (
-    <div className="flex flex-col h-full bg-white">
+    <div className="flex flex-col h-full bg-bg-surface transition-colors duration-300">
       {/* Header */}
-      <div className="flex items-center justify-between p-4 border-b bg-gray-50">
-        <h2 className="font-semibold text-gray-800 flex items-center">
-          <FileBox className="w-5 h-5 mr-2 text-blue-600" />
+      <div className="flex items-center justify-between p-4 border-b border-border-base bg-bg-app">
+        <h2 className="font-semibold text-text-main flex items-center">
+          <FileBox className="w-5 h-5 mr-2 text-accent-primary" />
           Dokument Details
         </h2>
-        <button onClick={onClose} className="p-1 hover:bg-gray-200 rounded text-gray-500">
+        <button onClick={onClose} className="p-1 hover:bg-bg-surface rounded text-text-subtle transition-colors">
           <X className="w-5 h-5" />
         </button>
       </div>
 
-      <div className="flex-1 overflow-y-auto p-4 space-y-4">
+      <div className="flex-1 overflow-y-auto overflow-x-hidden p-4 space-y-4">
         {/* Filename badge */}
-        <div className="bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 text-xs text-gray-600 font-mono break-all">
+        <div className="bg-bg-app border border-border-base rounded-lg px-3 py-2 text-xs text-text-subtle font-mono break-all">
           {fileName}
         </div>
 
@@ -122,9 +122,9 @@ export const Sidebar: React.FC<SidebarProps> = ({ document, isInbox, isArchive, 
         {onOpenPdf && (
           <button
             onClick={onOpenPdf}
-            className="w-full py-2 px-4 border border-gray-200 text-gray-700 bg-gray-50 hover:bg-gray-100 rounded-lg transition-colors flex items-center justify-center text-sm font-medium"
+            className="w-full py-2 px-4 border border-border-base text-text-main bg-bg-app hover:bg-bg-surface rounded-lg transition-colors flex items-center justify-center text-sm font-medium"
           >
-            <FileText className="w-4 h-4 mr-2 text-blue-500" />
+            <FileText className="w-4 h-4 mr-2 text-accent-primary" />
             PDF anzeigen
           </button>
         )}
@@ -163,32 +163,32 @@ export const Sidebar: React.FC<SidebarProps> = ({ document, isInbox, isArchive, 
         {/* Metadata fields */}
         <div className="space-y-3">
           <div>
-            <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1 flex items-center">
-              <User className="w-3.5 h-3.5 mr-1.5 text-blue-500" /> Absender
+            <label className="block text-xs font-semibold text-text-subtle uppercase tracking-wider mb-1 flex items-center">
+              <User className="w-3.5 h-3.5 mr-1.5 text-accent-primary" /> Absender
             </label>
             <input type="text" value={sender} onChange={e => setSender(e.target.value)}
               disabled={isProcessing} className={inputClass} placeholder="z.B. Telekom GmbH" />
           </div>
 
           <div>
-            <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1 flex items-center">
-              <Calendar className="w-3.5 h-3.5 mr-1.5 text-blue-500" /> Datum
+            <label className="block text-xs font-semibold text-text-subtle uppercase tracking-wider mb-1 flex items-center">
+              <Calendar className="w-3.5 h-3.5 mr-1.5 text-accent-primary" /> Datum
             </label>
             <input type="date" value={date} onChange={e => setDate(e.target.value)}
               disabled={isProcessing} className={inputClass} />
           </div>
 
           <div>
-            <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1 flex items-center">
-              <FileBox className="w-3.5 h-3.5 mr-1.5 text-blue-500" /> Dokumenttyp
+            <label className="block text-xs font-semibold text-text-subtle uppercase tracking-wider mb-1 flex items-center">
+              <FileBox className="w-3.5 h-3.5 mr-1.5 text-accent-primary" /> Dokumenttyp
             </label>
             <input type="text" value={docType} onChange={e => setDocType(e.target.value)}
               disabled={isProcessing} className={inputClass} placeholder="z.B. Rechnung, Vertrag, Brief" />
           </div>
 
           <div>
-            <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1 flex items-center">
-              <Tag className="w-3.5 h-3.5 mr-1.5 text-blue-500" /> Tags <span className="normal-case text-gray-400 ml-1 font-normal">(kommagetrennt)</span>
+            <label className="block text-xs font-semibold text-text-subtle uppercase tracking-wider mb-1 flex items-center">
+              <Tag className="w-3.5 h-3.5 mr-1.5 text-accent-primary" /> Tags <span className="normal-case text-text-subtle/50 ml-1 font-normal">(kommagetrennt)</span>
             </label>
             <input type="text" value={tags} onChange={e => setTags(e.target.value)}
               disabled={isProcessing} className={inputClass} placeholder="Rechnung, Internet, Urgent" />
@@ -197,15 +197,15 @@ export const Sidebar: React.FC<SidebarProps> = ({ document, isInbox, isArchive, 
           {/* Archive path — shown in sort and archive views */}
           {!isInbox && (
             <div>
-              <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1 flex items-center">
+              <label className="block text-xs font-semibold text-text-subtle uppercase tracking-wider mb-1 flex items-center">
                 <FolderInput className="w-3.5 h-3.5 mr-1.5 text-green-500" /> Archivpfad
-                <span className="normal-case text-gray-400 ml-1 font-normal">(KI-Vorschlag, editierbar)</span>
+                <span className="normal-case text-text-subtle/50 ml-1 font-normal">(KI-Vorschlag, editierbar)</span>
               </label>
               <input type="text" value={archivePath} onChange={e => setArchivePath(e.target.value)}
                 disabled={isProcessing} className={inputClass}
                 placeholder="z.B. Rechnungen/Internet" />
               {archivePath && (
-                <p className="text-xs text-gray-400 mt-1 font-mono">
+                <p className="text-xs text-text-subtle mt-1 font-mono break-all">
                   …/Archiv/<span className="text-green-600">{archivePath}</span>/{fileName}
                 </p>
               )}
@@ -215,7 +215,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ document, isInbox, isArchive, 
 
         {/* Action buttons */}
         {!isArchive && (
-          <div className="pt-3 border-t border-gray-100 space-y-2">
+          <div className="pt-3 border-t border-border-base space-y-2">
             {document.metadata && (() => {
               try { return JSON.parse(document.metadata).needsOcr; } catch { return false; }
             })() && (
@@ -235,7 +235,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ document, isInbox, isArchive, 
       </div>
 
       {/* Footer buttons */}
-      <div className="p-4 border-t bg-gray-50 flex flex-col space-y-2">
+      <div className="p-4 border-t border-border-base bg-bg-app flex flex-col space-y-2">
         {isInbox && isError && (
           <>
             <button onClick={handleRetry} disabled={loading}
@@ -252,7 +252,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ document, isInbox, isArchive, 
         )}
 
         {isInbox && !isError && !isAiPending && (
-          <p className="text-center text-sm text-gray-400 py-2 italic">
+          <p className="text-center text-sm text-text-subtle py-2 italic">
             {isProcessing ? processingText : 'Automatische Verarbeitung läuft…'}
           </p>
         )}
