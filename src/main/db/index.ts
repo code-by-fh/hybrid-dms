@@ -48,15 +48,21 @@ export function initDb() {
     db.exec("ALTER TABLE documents ADD COLUMN full_text TEXT");
   }
 
-  // Assign UUIDs to existing rows that have none
+  // Assign UUIDs to existing rows that have none (wrapped in transaction for atomicity + speed)
   const rowsWithoutUuid = db.prepare("SELECT id FROM documents WHERE uuid IS NULL OR uuid = ''").all() as any[];
-  const updateUuid = db.prepare("UPDATE documents SET uuid = ? WHERE id = ?");
-  const insertFts = db.prepare("INSERT OR IGNORE INTO documents_fts (uuid, full_text) VALUES (?, '')");
-  for (const row of rowsWithoutUuid) {
-    const newUuid = crypto.randomUUID();
-    updateUuid.run(newUuid, row.id);
-    insertFts.run(newUuid);
+  if (rowsWithoutUuid.length > 0) {
+    const updateUuid = db.prepare("UPDATE documents SET uuid = ? WHERE id = ?");
+    const insertFts = db.prepare("INSERT OR IGNORE INTO documents_fts (uuid, full_text) VALUES (?, '')");
+    db.transaction(() => {
+      for (const row of rowsWithoutUuid as any[]) {
+        const newUuid = crypto.randomUUID();
+        updateUuid.run(newUuid, row.id);
+        insertFts.run(newUuid);
+      }
+    })();
   }
+
+  db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_documents_uuid ON documents(uuid) WHERE uuid IS NOT NULL");
 }
 
 export function getSetting(key: string, defaultValue: string = ''): string {
@@ -96,8 +102,12 @@ export function updateDocumentMetadata(hash: string, tags: string, metadata: str
 }
 
 export function deleteDocumentByPath(filePath: string) {
-    const stmt = db.prepare('DELETE FROM documents WHERE last_path = ?');
-    return stmt.run(filePath);
+  // Look up uuid before deleting so we can clean FTS5
+  const row = db.prepare('SELECT uuid FROM documents WHERE last_path = ?').get(filePath) as any;
+  if (row?.uuid) {
+    db.prepare('DELETE FROM documents_fts WHERE uuid = ?').run(row.uuid);
+  }
+  return db.prepare('DELETE FROM documents WHERE last_path = ?').run(filePath);
 }
 
 export function updateDocumentStatus(hash: string, status: string) {
@@ -127,15 +137,19 @@ export function updateFullText(uuid: string, fullText: string) {
 }
 
 export function searchDocuments(query: string): any[] {
-  return db.prepare(`
-    SELECT d.uuid, d.last_path, d.tags, d.metadata, d.status,
-           snippet(documents_fts, 1, '<mark>', '</mark>', '...', 20) AS snippet
-    FROM documents_fts f
-    JOIN documents d ON d.uuid = f.uuid
-    WHERE documents_fts MATCH ?
-    ORDER BY rank
-    LIMIT 50
-  `).all(query) as any[];
+  try {
+    return db.prepare(`
+      SELECT d.uuid, d.last_path, d.tags, d.metadata, d.status,
+             snippet(documents_fts, 1, '<mark>', '</mark>', '...', 20) AS snippet
+      FROM documents_fts f
+      JOIN documents d ON d.uuid = f.uuid
+      WHERE documents_fts MATCH ?
+      ORDER BY rank
+      LIMIT 50
+    `).all(query) as any[];
+  } catch {
+    return [];
+  }
 }
 
 export function deleteDocumentByUuid(uuid: string) {
