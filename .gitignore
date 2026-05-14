@@ -13,6 +13,9 @@ dist-electron
 dist-ssr
 *.local
 
+# Internal documentation
+docu/
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
