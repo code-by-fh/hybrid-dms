@@ -86,16 +86,36 @@ export function startWatcher(onDbChange?: () => void) {
       // --- Already known? ---
       const existing = getDocumentByHash(hash);
       if (existing) {
-        console.log(`[DEBUG][Watcher] Bereits in DB — Pfad prüfen`);
-        if (path.normalize(existing.last_path).toLowerCase() !== filePathLower) {
-          console.log(`[DEBUG][Watcher] Pfad geändert: ${existing.last_path} -> ${normalizedPath}`);
-          updateDocumentPath(hash, normalizedPath);
-          if (onDbChange) onDbChange();
+        const existingPathLower = path.normalize(existing.last_path).toLowerCase();
+
+        if (existingPathLower === filePathLower) {
+          // Same path, same location
+          if (isInInboxDir && (existing.status === 'new' || existing.status === 'error')) {
+            // In inbox but unprocessed/errored — delete and reprocess
+            console.log(`[DEBUG][Watcher] Datei bereits in Inbox mit Status '${existing.status}' — DB-Eintrag löschen und neu verarbeiten`);
+            deleteDocumentByPath(existing.last_path);
+            // Fall through to new-file pipeline
+          } else {
+            console.log(`[DEBUG][Watcher] Gleicher Pfad und kein Handlungsbedarf — überspringe.`);
+            console.log(`[DEBUG][Watcher] ========================================\n`);
+            return;
+          }
         } else {
-          console.log(`[DEBUG][Watcher] Gleicher Pfad, nichts zu tun.`);
+          // Different path
+          if (isInInboxDir) {
+            // File moved/copied into inbox — delete old entry, reprocess fresh
+            console.log(`[DEBUG][Watcher] Bekannte Datei jetzt in Inbox (${normalizedPath}) — alter Eintrag gelöscht, wird neu verarbeitet`);
+            deleteDocumentByPath(existing.last_path);
+            // Fall through to new-file pipeline
+          } else {
+            // File moved to non-inbox location — just update path
+            console.log(`[DEBUG][Watcher] Pfad geändert (außerhalb Inbox): ${existing.last_path} -> ${normalizedPath}`);
+            updateDocumentPath(hash, normalizedPath);
+            if (onDbChange) onDbChange();
+            console.log(`[DEBUG][Watcher] ========================================\n`);
+            return;
+          }
         }
-        console.log(`[DEBUG][Watcher] ========================================\n`);
-        return;
       }
 
       const isInbox = isInInboxDir;
