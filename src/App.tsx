@@ -29,6 +29,7 @@ function App() {
   const [ollamaStatus, setOllamaStatus] = useState(false)
   const [pdfViewerDoc, setPdfViewerDoc] = useState<DocumentType | null>(null)
   const [crawlerRunning, setCrawlerRunning] = useState(false)
+  const [ftsResults, setFtsResults] = useState<DocumentType[] | null>(null)
 
   useEffect(() => {
     // Initial load
@@ -60,6 +61,18 @@ function App() {
     }
   }, [isSettingsOpen])
 
+  useEffect(() => {
+    if (!searchQuery || searchQuery.trim().length < 2) {
+      setFtsResults(null);
+      return;
+    }
+    const timer = setTimeout(async () => {
+      const results = await (window.electronAPI as any).searchDocuments(searchQuery);
+      setFtsResults(results);
+    }, 200);
+    return () => clearTimeout(timer);
+  }, [searchQuery]);
+
   const handleMoveToProcessing = async (hash: string) => {
     await window.electronAPI.moveToProcessing(hash);
     window.electronAPI.getDocuments().then(setDocuments);
@@ -84,25 +97,15 @@ function App() {
     setSelectedDoc(null);
   };
 
-  const filteredDocuments = documents.filter(doc => {
-    if (searchQuery) {
-      const q = searchQuery.toLowerCase();
-      let meta: any = {};
-      try { meta = doc.metadata ? JSON.parse(doc.metadata) : {}; } catch {}
-      return (
-        doc.last_path.toLowerCase().includes(q) ||
-        (doc.tags || '').toLowerCase().includes(q) ||
-        (meta.sender || '').toLowerCase().includes(q) ||
-        (meta.docType || '').toLowerCase().includes(q) ||
-        (meta.archivePath || '').toLowerCase().includes(q)
-      );
-    }
-    if (!settings) return true;
-    if (currentView === 'inbox') return doc.last_path.startsWith(settings.INBOX_PATH);
-    if (currentView === 'sort') return doc.last_path.startsWith(settings.PROCESSING_PATH);
-    if (currentView === 'archive') return doc.last_path.startsWith(settings.ARCHIVE_PATH);
-    return true;
-  });
+  const filteredDocuments = ftsResults !== null
+    ? ftsResults
+    : documents.filter(doc => {
+        if (!settings) return true;
+        if (currentView === 'inbox') return doc.last_path.startsWith(settings.INBOX_PATH);
+        if (currentView === 'sort') return doc.last_path.startsWith(settings.PROCESSING_PATH);
+        if (currentView === 'archive') return doc.last_path.startsWith(settings.ARCHIVE_PATH);
+        return true;
+      });
 
   const getTitle = () => {
     switch(currentView) {

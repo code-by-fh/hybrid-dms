@@ -2,7 +2,8 @@ import { app, BrowserWindow, ipcMain, dialog } from 'electron';
 import path from 'path';
 import fs from 'fs/promises';
 import { fileURLToPath } from 'url';
-import { initDb, getAllDocuments, getSetting, setSetting, getDocumentByHash, updateDocumentMetadata, updateDocumentPath, updateDocumentStatus } from './db/index.js';
+import { initDb, getAllDocuments, getSetting, setSetting, getDocumentByHash, updateDocumentMetadata, updateDocumentPath, updateDocumentStatus, searchDocuments } from './db/index.js';
+import { writeXmpMetadata } from './services/xmpService.js';
 import { startWatcher, runUuidCrawler, isCrawlerRunning, getConfig, processPendingDocuments } from './services/syncEngine.js';
 import { checkOllamaStatus, analyzeDocumentWithAI } from './services/aiService.js';
 import { performOCR } from './services/ocrService.js';
@@ -128,6 +129,16 @@ ipcMain.handle('save-and-move', async (event, { hash, tags, metadata }) => {
         delete saveMeta.archivePath; // don't double-store in metadata
         updateDocumentMetadata(hash, JSON.stringify(tags), JSON.stringify(saveMeta), 'processed');
         updateDocumentPath(hash, targetPath);
+
+        // Write updated tags + UUID to PDF XMP (non-fatal)
+        try {
+          const doc2 = getDocumentByHash(hash);
+          if (doc2?.uuid) {
+            await writeXmpMetadata(targetPath, doc2.uuid, Array.isArray(tags) ? tags : JSON.parse(tags as any));
+          }
+        } catch (xmpErr) {
+          console.warn('[save-and-move] XMP write failed (non-fatal):', xmpErr);
+        }
 
         console.log(`Document archived: ${targetPath}`);
         return { success: true };
@@ -267,6 +278,15 @@ ipcMain.handle('rename-file', async (event, { hash, newName }: { hash: string; n
         const newPath = path.join(dir, nameWithExt);
         await fs.rename(doc.last_path, newPath);
         updateDocumentPath(hash, newPath);
+        // Write UUID to XMP after rename
+        try {
+          const renamedDoc = getDocumentByHash(hash);
+          if (renamedDoc?.uuid) {
+            await writeXmpMetadata(newPath, renamedDoc.uuid, renamedDoc.tags ? JSON.parse(renamedDoc.tags) : []);
+          }
+        } catch (xmpErr) {
+          console.warn('[rename-file] XMP write failed (non-fatal):', xmpErr);
+        }
         return { success: true, newPath };
     } catch (err) {
         console.error('Rename file failed:', err);
@@ -285,6 +305,13 @@ ipcMain.handle('run-crawler', async () => {
 
 ipcMain.handle('get-crawler-status', () => {
   return { running: isCrawlerRunning() };
+});
+
+ipcMain.handle('search-documents', async (_event, query: string) => {
+  if (!query || query.trim().length < 2) return [];
+  // Append wildcard for prefix matching; escape special FTS5 operators
+  const safeQuery = query.trim().replace(/["*^]/g, '') + '*';
+  return searchDocuments(safeQuery);
 });
 
 ipcMain.handle('move-file', async (event, { hash, targetDir }: { hash: string; targetDir: string }) => {

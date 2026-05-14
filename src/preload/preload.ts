@@ -23,5 +23,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.removeAllListeners('crawler-status-changed');
     ipcRenderer.on('crawler-status-changed', (_event, status) => callback(status));
   },
+  searchDocuments: (query: string) => ipcRenderer.invoke('search-documents', query),
 });
 
