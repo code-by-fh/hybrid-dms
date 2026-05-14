@@ -2,14 +2,14 @@ import chokidar from 'chokidar';
 import path from 'path';
 import fs from 'fs/promises';
 import fsSync from 'fs';
+import crypto from 'crypto';
 import { app } from 'electron';
 import { calculateHash } from './hashService';
-import { getDocumentByHash, insertDocument, updateDocumentPath, getAllDocuments, getSetting, updateDocumentMetadata, deleteDocumentByPath, updateDocumentStatus } from '../db/index.js';
-import { analyzeDocumentWithAI } from './aiService.js';
+import { getDocumentByHash, getDocumentByUuid, insertDocumentWithUuid, updateDocumentPath, getAllDocuments, getSetting, updateDocumentMetadata, deleteDocumentByPath, updateDocumentStatus, updateFullText, getUuidByHash } from '../db/index.js';
+import { analyzeDocumentWithAI, buildFilename } from './aiService.js';
 import { performOCR } from './ocrService.js';
-// @ts-ignore - TS complains about no default export, but Vite handles it
-import pdfParseModule from 'pdf-parse';
-const pdfParse = (pdfParseModule as any).default || pdfParseModule;
+import { readDocumentUuid, writeXmpMetadata } from './xmpService.js';
+import { PDFParse } from 'pdf-parse';
 
 // Konfiguration der Pfade dynamisch aus der DB laden
 export function getConfig() {
@@ -34,8 +34,138 @@ export function ensureDirs() {
   });
 }
 
+// Inbox processing queue — max 5 concurrent
+const MAX_CONCURRENT_INBOX = 5;
+let activeInboxProcessing = 0;
+const inboxQueue: Array<() => Promise<void>> = [];
+
+function runNextInQueue() {
+  if (activeInboxProcessing >= MAX_CONCURRENT_INBOX || inboxQueue.length === 0) return;
+  activeInboxProcessing++;
+  const task = inboxQueue.shift()!;
+  task().finally(() => {
+    activeInboxProcessing--;
+    runNextInQueue();
+  });
+}
+
+function enqueueInboxFile(task: () => Promise<void>) {
+  inboxQueue.push(task);
+  runNextInQueue();
+}
+
 // Watcher für die Inbox und andere Ordner
 let currentWatcher: chokidar.FSWatcher | null = null;
+
+async function processInboxFile(uuid: string, hash: string, normalizedPath: string, onDbChange?: () => void) {
+  const config = getConfig();
+  console.log(`[Pipeline] Starting for uuid=${uuid} hash=${hash} path=${normalizedPath}`);
+
+  // STEP 1: PDF text extraction
+  const dataBuffer = await fs.readFile(normalizedPath);
+  let hasText = false;
+  let extractedText = '';
+  try {
+    const parser = new PDFParse({ data: dataBuffer });
+    const pdfData = await parser.getText();
+    await parser.destroy();
+    extractedText = pdfData.text || '';
+    hasText = extractedText.trim().length > 50;
+  } catch (e) {
+    console.error(`[Pipeline] PDFParse failed:`, e);
+  }
+
+  // STEP 2: Update DB with OCR flag
+  updateDocumentMetadata(hash, '[]', JSON.stringify({ needsOcr: !hasText }), 'new');
+  if (onDbChange) onDbChange();
+
+  // STEP 3: OCR if no text
+  if (!hasText) {
+    updateDocumentStatus(hash, 'ocr_processing');
+    if (onDbChange) onDbChange();
+    try {
+      extractedText = await performOCR(normalizedPath);
+      if (extractedText && extractedText.trim().length > 50) {
+        hasText = true;
+        updateDocumentMetadata(hash, '[]', JSON.stringify({ needsOcr: false }), 'new');
+        if (onDbChange) onDbChange();
+      } else {
+        updateDocumentStatus(hash, 'error');
+        if (onDbChange) onDbChange();
+        return;
+      }
+    } catch (ocrError) {
+      console.error(`[Pipeline] OCR failed:`, ocrError);
+      updateDocumentStatus(hash, 'error');
+      if (onDbChange) onDbChange();
+      return;
+    }
+  }
+
+  // Store full text in FTS5
+  updateFullText(uuid, extractedText);
+
+  // STEP 4: AI Analysis
+  updateDocumentStatus(hash, 'ai_processing');
+  if (onDbChange) onDbChange();
+
+  let aiResult: any = null;
+  try {
+    aiResult = await analyzeDocumentWithAI(extractedText);
+  } catch (aiError) {
+    console.error(`[Pipeline] AI failed:`, aiError);
+  }
+
+  if (!aiResult) {
+    updateDocumentMetadata(hash, '[]', JSON.stringify({ needsOcr: false, aiPending: true }), 'ai_pending');
+    if (onDbChange) onDbChange();
+    return;
+  }
+
+  // STEP 5: Save metadata + write XMP + move to Sortieren
+  const tags = Array.isArray(aiResult.tags) ? aiResult.tags : [];
+  const ext = path.extname(normalizedPath);
+  const baseName = aiResult.suggestedFilename ||
+    buildFilename(aiResult.date || '', aiResult.docType || '', aiResult.sender || '');
+  const newFileName = baseName + ext;
+  const archivePath = aiResult.archivePath || 'Sonstiges';
+
+  const aiMetadata = JSON.stringify({
+    sender: aiResult.sender || '',
+    date: aiResult.date || '',
+    docType: aiResult.docType || '',
+    needsOcr: false,
+    archivePath,
+    suggestedFilename: newFileName,
+  });
+
+  updateDocumentMetadata(hash, JSON.stringify(tags), aiMetadata, 'new');
+
+  // Write UUID + tags to PDF XMP
+  try {
+    await writeXmpMetadata(normalizedPath, uuid, tags);
+  } catch (xmpErr) {
+    console.warn(`[Pipeline] XMP write failed (non-fatal):`, xmpErr);
+  }
+
+  const processingPath = path.join(config.PROCESSING_PATH, newFileName);
+  try {
+    let finalProcessingPath = processingPath;
+    let counter = 1;
+    while (await fs.stat(finalProcessingPath).then(() => true).catch(() => false)) {
+      const nameWithoutExt = path.basename(newFileName, ext);
+      finalProcessingPath = path.join(config.PROCESSING_PATH, `${nameWithoutExt}_${counter}${ext}`);
+      counter++;
+    }
+    await fs.rename(normalizedPath, finalProcessingPath);
+    updateDocumentPath(hash, finalProcessingPath);
+    console.log(`[Pipeline] Moved to Sortieren: ${finalProcessingPath}`);
+  } catch (moveErr) {
+    console.error(`[Pipeline] Move failed:`, moveErr);
+  }
+
+  if (onDbChange) onDbChange();
+}
 
 export function startWatcher(onDbChange?: () => void) {
   if (currentWatcher) {
@@ -56,183 +186,72 @@ export function startWatcher(onDbChange?: () => void) {
 
   currentWatcher.on('add', async (filePath) => {
     const normalizedPath = path.normalize(filePath);
-    console.log(`\n[DEBUG][Watcher] ========================================`);
-    console.log(`[DEBUG][Watcher] File detected: ${normalizedPath}`);
-    console.log(`[DEBUG][Watcher] Time: ${new Date().toISOString()}`);
-
     try {
-      // --- Hash ---
-      const hash = await calculateHash(normalizedPath);
-      console.log(`[DEBUG][Watcher] Hash: ${hash}`);
-
       const config = getConfig();
-      const normalizedInbox = path.normalize(config.INBOX_PATH);
-      const normalizedProcessing = path.normalize(config.PROCESSING_PATH);
-
-      // Case-insensitive comparison for Windows (drive letter C: vs c:)
       const filePathLower = normalizedPath.toLowerCase();
-      const inboxPathLower = normalizedInbox.toLowerCase();
-      const isInInboxDir = filePathLower.startsWith(inboxPathLower);
+      const isInInboxDir = filePathLower.startsWith(path.normalize(config.INBOX_PATH).toLowerCase());
 
-      console.log(`[DEBUG][Watcher] INBOX_PATH      = ${normalizedInbox}`);
-      console.log(`[DEBUG][Watcher] PROCESSING_PATH = ${normalizedProcessing}`);
-      console.log(`[DEBUG][Watcher] Datei liegt im Inbox-Ordner? ${isInInboxDir}`);
-      if (!isInInboxDir) {
-        console.log(`[DEBUG][Watcher] MISMATCH DETAIL:`);
-        console.log(`[DEBUG][Watcher]   Datei-Pfad (lower): ${filePathLower}`);
-        console.log(`[DEBUG][Watcher]   Inbox-Pfad (lower): ${inboxPathLower}`);
+      // Try UUID from XMP first (fast path for known files — avoids hashing)
+      const xmpUuid = await readDocumentUuid(normalizedPath);
+      if (xmpUuid) {
+        const existing = getDocumentByUuid(xmpUuid);
+        if (existing) {
+          if (path.normalize(existing.last_path).toLowerCase() !== filePathLower) {
+            updateDocumentPath(existing.hash, normalizedPath);
+            if (onDbChange) onDbChange();
+          }
+          if (!isInInboxDir) return; // Known file outside inbox — path updated, done
+        }
       }
 
-      // --- Already known? ---
+      // Hash-based path (new files or files without UUID in XMP)
+      const hash = await calculateHash(normalizedPath);
       const existing = getDocumentByHash(hash);
+
       if (existing) {
         const existingPathLower = path.normalize(existing.last_path).toLowerCase();
-
         if (existingPathLower === filePathLower) {
-          // Same path, same location
           if (isInInboxDir && (existing.status === 'new' || existing.status === 'error')) {
-            // In inbox but unprocessed/errored — delete and reprocess
-            console.log(`[DEBUG][Watcher] Datei bereits in Inbox mit Status '${existing.status}' — DB-Eintrag löschen und neu verarbeiten`);
             deleteDocumentByPath(existing.last_path);
             // Fall through to new-file pipeline
           } else {
-            console.log(`[DEBUG][Watcher] Gleicher Pfad und kein Handlungsbedarf — überspringe.`);
-            console.log(`[DEBUG][Watcher] ========================================\n`);
             return;
           }
         } else {
-          // Different path
           if (isInInboxDir) {
-            // File moved/copied into inbox — delete old entry, reprocess fresh
-            console.log(`[DEBUG][Watcher] Bekannte Datei jetzt in Inbox (${normalizedPath}) — alter Eintrag gelöscht, wird neu verarbeitet`);
             deleteDocumentByPath(existing.last_path);
             // Fall through to new-file pipeline
           } else {
-            // File moved to non-inbox location — just update path
-            console.log(`[DEBUG][Watcher] Pfad geändert (außerhalb Inbox): ${existing.last_path} -> ${normalizedPath}`);
             updateDocumentPath(hash, normalizedPath);
             if (onDbChange) onDbChange();
-            console.log(`[DEBUG][Watcher] ========================================\n`);
             return;
           }
         }
       }
 
-      const isInbox = isInInboxDir;
-      console.log(`[DEBUG][Watcher] Neue Datei. isInbox=${isInbox}`);
-
-      if (!isInbox) {
-        console.log(`[DEBUG][Watcher] Außerhalb Inbox — als 'processed' indexieren.`);
-        insertDocument(hash, normalizedPath, '[]', '{}', 'processed');
+      if (!isInInboxDir) {
+        // Unknown file outside inbox — generate UUID, index as processed
+        const newUuid = xmpUuid || crypto.randomUUID();
+        insertDocumentWithUuid(newUuid, hash, normalizedPath, '[]', '{}', 'processed');
+        if (!xmpUuid) {
+          writeXmpMetadata(normalizedPath, newUuid, []).catch(e =>
+            console.warn(`[Watcher] XMP write failed for archive file:`, e)
+          );
+        }
         if (onDbChange) onDbChange();
-        console.log(`[DEBUG][Watcher] ========================================\n`);
         return;
       }
 
-      // === INBOX PROCESSING PIPELINE ===
-
-      // STEP 1: PDF text extraction
-      console.log(`[DEBUG][Step 1] Reading file...`);
-      const dataBuffer = await fs.readFile(normalizedPath);
-      console.log(`[DEBUG][Step 1] File size: ${dataBuffer.length} bytes`);
-
-      let hasText = false;
-      let extractedText = '';
-      try {
-        console.log(`[DEBUG][Step 1] Running pdf-parse...`);
-        const pdfData = await pdfParse(dataBuffer);
-        extractedText = pdfData.text || '';
-        hasText = extractedText.trim().length > 50;
-        console.log(`[DEBUG][Step 1] pdf-parse result: ${extractedText.trim().length} chars, hasText=${hasText}`);
-      } catch (e) {
-        console.error(`[DEBUG][Step 1] pdf-parse FAILED:`, e);
-      }
-
-      // STEP 2: Insert into DB
-      insertDocument(hash, normalizedPath, '[]', JSON.stringify({ needsOcr: !hasText }));
-      console.log(`[DEBUG][Step 2] Inserted into DB (needsOcr=${!hasText})`);
+      // New inbox file — generate UUID and start pipeline
+      const uuid = xmpUuid || crypto.randomUUID();
+      insertDocumentWithUuid(uuid, hash, normalizedPath, '[]', '{}', 'new');
       if (onDbChange) onDbChange();
 
-      // STEP 3: OCR — only if no text
-      if (!hasText) {
-        console.log(`[DEBUG][Step 3] No text found — starting OCR...`);
-        updateDocumentStatus(hash, 'ocr_processing');
-        if (onDbChange) onDbChange();
-
-        try {
-          extractedText = await performOCR(normalizedPath);
-          if (extractedText && extractedText.trim().length > 50) {
-            hasText = true;
-            console.log(`[DEBUG][Step 3] OCR SUCCESS: ${extractedText.trim().length} chars`);
-            updateDocumentMetadata(hash, '[]', JSON.stringify({ needsOcr: false }), 'new');
-            if (onDbChange) onDbChange();
-          } else {
-            console.warn(`[DEBUG][Step 3] OCR result too short (${extractedText?.trim().length ?? 0} chars) — REAL FAILURE`);
-            updateDocumentStatus(hash, 'error');
-            if (onDbChange) onDbChange();
-            console.log(`[DEBUG][Watcher] ========================================\n`);
-            return; // Nothing readable — stop here
-          }
-        } catch (ocrError) {
-          console.error(`[DEBUG][Step 3] OCR THREW exception:`, ocrError);
-          updateDocumentStatus(hash, 'error');
-          if (onDbChange) onDbChange();
-          console.log(`[DEBUG][Watcher] ========================================\n`);
-          return; // OCR failed — stop here
-        }
-      }
-
-      // STEP 4: AI Analysis
-      console.log(`[DEBUG][Step 4] Starting AI analysis...`);
-      updateDocumentStatus(hash, 'ai_processing');
-      if (onDbChange) onDbChange();
-
-      let tags = '[]';
-      let aiMetadata = JSON.stringify({ needsOcr: false, aiSkipped: true });
-
-      try {
-        const aiResult = await analyzeDocumentWithAI(extractedText);
-        if (aiResult) {
-          tags = Array.isArray(aiResult.tags) ? JSON.stringify(aiResult.tags) : '[]';
-          aiMetadata = JSON.stringify({
-            sender: aiResult.sender || '',
-            date: aiResult.date || '',
-            docType: aiResult.docType || '',
-            needsOcr: false,
-          });
-          console.log(`[DEBUG][Step 4] AI SUCCESS: sender="${aiResult.sender}", date="${aiResult.date}", type="${aiResult.docType}", tags=${tags}`);
-        } else {
-          console.warn(`[DEBUG][Step 4] AI returned null (Ollama offline?) — will move to Sortieren for manual review`);
-        }
-      } catch (aiError) {
-        console.error(`[DEBUG][Step 4] AI THREW exception:`, aiError);
-        // aiMetadata stays as aiSkipped:true
-      }
-
-      // STEP 5: Save metadata + move to Sortieren (regardless of AI success)
-      updateDocumentMetadata(hash, tags, aiMetadata, 'new');
-      console.log(`[DEBUG][Step 5] Metadata saved. Moving to Sortieren...`);
-
-      const fileName = path.basename(normalizedPath);
-      const processingPath = path.join(config.PROCESSING_PATH, fileName);
-      console.log(`[DEBUG][Step 5] Target: ${processingPath}`);
-
-      try {
-        await fs.rename(normalizedPath, processingPath);
-        updateDocumentPath(hash, processingPath);
-        console.log(`[DEBUG][Step 5] ✓ Moved to Sortieren: ${processingPath}`);
-      } catch (moveErr) {
-        console.error(`[DEBUG][Step 5] Move FAILED:`, moveErr);
-      }
-
-      if (onDbChange) onDbChange();
-      console.log(`[DEBUG][Watcher] ✓ Pipeline complete for ${hash}`);
+      enqueueInboxFile(() => processInboxFile(uuid, hash, normalizedPath, onDbChange));
 
     } catch (err) {
-      console.error(`[DEBUG][Watcher] UNHANDLED ERROR for ${normalizedPath}:`, err);
+      console.error(`[Watcher] Error for ${normalizedPath}:`, err);
     }
-
-    console.log(`[DEBUG][Watcher] ========================================\n`);
   });
 
 
@@ -302,6 +321,56 @@ export async function processPendingDocuments(onDbChange?: () => void) {
             console.log(`[Sync] Resetting stuck status '${doc.status}' for ${doc.hash} in Sortieren`);
             updateDocumentStatus(doc.hash, 'new');
             if (onDbChange) onDbChange();
+            continue;
+        }
+
+        // Retry AI for inbox docs that were paused because Ollama was offline
+        if (isInBox && doc.status === 'ai_pending') {
+            console.log(`[Sync] Retrying AI for ${doc.hash} (was ai_pending)...`);
+            try {
+                updateDocumentStatus(doc.hash, 'ai_processing');
+                if (onDbChange) onDbChange();
+
+                // Re-extract text (OCR already done before, but we need text for AI)
+                const extractedText = await performOCR(doc.last_path);
+                const aiResult = await analyzeDocumentWithAI(extractedText);
+
+                if (aiResult) {
+                    const tags = Array.isArray(aiResult.tags) ? JSON.stringify(aiResult.tags) : '[]';
+                    const ext = path.extname(doc.last_path);
+                    const baseName = aiResult.suggestedFilename ||
+                        buildFilename(aiResult.date || '', aiResult.docType || '', aiResult.sender || '');
+                    const newFileName = baseName + ext;
+                    const archivePath = aiResult.archivePath || 'Sonstiges';
+                    const newMetadata = JSON.stringify({
+                        sender: aiResult.sender || '',
+                        date: aiResult.date || '',
+                        docType: aiResult.docType || '',
+                        needsOcr: false,
+                        archivePath,
+                        suggestedFilename: newFileName,
+                    });
+                    updateDocumentMetadata(doc.hash, tags, newMetadata, 'new');
+
+                    const processingPath = path.join(config.PROCESSING_PATH, newFileName);
+                    try {
+                        await fs.rename(doc.last_path, processingPath);
+                        updateDocumentPath(doc.hash, processingPath);
+                        console.log(`[Sync] AI retry succeeded, moved to Sortieren: ${processingPath}`);
+                    } catch (moveErr) {
+                        console.error(`[Sync] Move after AI retry failed`, moveErr);
+                    }
+                } else {
+                    // Still offline — reset to ai_pending so we retry next cycle
+                    console.warn(`[Sync] AI still unavailable for ${doc.hash}, will retry later`);
+                    updateDocumentStatus(doc.hash, 'ai_pending');
+                }
+                if (onDbChange) onDbChange();
+            } catch (e) {
+                console.error(`[Sync] AI retry failed for ${doc.hash}`, e);
+                updateDocumentStatus(doc.hash, 'ai_pending');
+                if (onDbChange) onDbChange();
+            }
             continue;
         }
 
