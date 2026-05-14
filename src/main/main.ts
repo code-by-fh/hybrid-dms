@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, dialog } from 'electron';
+import { app, BrowserWindow, ipcMain, dialog, Tray, Menu, globalShortcut, nativeImage } from 'electron';
 import path from 'path';
 import fs from 'fs/promises';
 import { fileURLToPath } from 'url';
@@ -25,6 +25,58 @@ if (typeof global !== 'undefined') {
 const __dirname = path.resolve(); // fallback
 
 let mainWindow: BrowserWindow | null = null;
+let tray: Tray | null = null;
+let searchWindow: BrowserWindow | null = null;
+
+function createSearchWindow() {
+  if (searchWindow && !searchWindow.isDestroyed()) {
+    if (searchWindow.isVisible()) {
+      searchWindow.hide();
+    } else {
+      searchWindow.show();
+      searchWindow.focus();
+    }
+    return;
+  }
+
+  searchWindow = new BrowserWindow({
+    width: 420,
+    height: 480,
+    frame: false,
+    resizable: false,
+    alwaysOnTop: true,
+    skipTaskbar: true,
+    webPreferences: {
+      preload: path.join(__dirname, 'dist-electron', 'preload.js'),
+      nodeIntegration: false,
+      contextIsolation: true,
+    },
+  });
+
+  if (process.env.VITE_DEV_SERVER_URL) {
+    searchWindow.loadURL(process.env.VITE_DEV_SERVER_URL + 'src/search.html');
+  } else {
+    searchWindow.loadFile(path.join(__dirname, 'dist', 'src', 'search.html'));
+  }
+
+  searchWindow.on('blur', () => searchWindow?.hide());
+}
+
+function createTray() {
+  const iconPath = path.join(app.getAppPath(), 'resources', 'tray-icon.png');
+  const icon = nativeImage.createFromPath(iconPath).resize({ width: 16, height: 16 });
+  tray = new Tray(icon);
+
+  const menu = Menu.buildFromTemplate([
+    { label: 'Suche öffnen (Strg+Alt+D)', click: createSearchWindow },
+    { label: 'Hauptfenster', click: () => { mainWindow?.show(); mainWindow?.focus(); } },
+    { type: 'separator' },
+    { label: 'Beenden', click: () => app.quit() },
+  ]);
+  tray.setToolTip('DMS Dokumentenarchiv');
+  tray.setContextMenu(menu);
+  tray.on('click', createSearchWindow);
+}
 
 function createWindow() {
   mainWindow = new BrowserWindow({
@@ -68,6 +120,8 @@ app.whenReady().then(async () => {
   });
 
   createWindow();
+  createTray();
+  globalShortcut.register('CommandOrControl+Alt+D', createSearchWindow);
 
   // Run UUID crawler on startup (healing scan + first-time migration), then process pending
   runUuidCrawler(
@@ -82,6 +136,10 @@ app.whenReady().then(async () => {
   app.on('activate', function () {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
   });
+});
+
+app.on('will-quit', () => {
+  globalShortcut.unregisterAll();
 });
 
 app.on('window-all-closed', function () {
@@ -342,4 +400,10 @@ ipcMain.handle('move-file', async (event, { hash, targetDir }: { hash: string; t
         console.error('Move file failed:', err);
         return { success: false, error: (err as Error).message };
     }
+});
+
+ipcMain.on('open-document-from-tray', (_event, uuid: string) => {
+  mainWindow?.show();
+  mainWindow?.focus();
+  mainWindow?.webContents.send('open-document-by-uuid', uuid);
 });

@@ -24,5 +24,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.on('crawler-status-changed', (_event, status) => callback(status));
   },
   searchDocuments: (query: string) => ipcRenderer.invoke('search-documents', query),
+  openDocumentFromTray: (uuid: string) => ipcRenderer.send('open-document-from-tray', uuid),
+  onOpenDocumentByUuid: (callback: (uuid: string) => void) => {
+    ipcRenderer.removeAllListeners('open-document-by-uuid');
+    ipcRenderer.on('open-document-by-uuid', (_event, uuid) => callback(uuid));
+  },
 });
 

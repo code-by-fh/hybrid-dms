@@ -25,4 +25,12 @@ export default defineConfig({
     }),
     renderer(),
   ],
+  build: {
+    rollupOptions: {
+      input: {
+        main: 'index.html',
+        search: 'src/search.html',
+      },
+    },
+  },
 })

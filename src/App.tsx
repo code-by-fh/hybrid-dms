@@ -57,6 +57,11 @@ function App() {
         setCrawlerRunning(status === 'running');
       });
 
+      ;(window.electronAPI as any).onOpenDocumentByUuid?.((uuid: string) => {
+        const doc = documents.find(d => d.uuid === uuid);
+        if (doc) setSelectedDoc(doc);
+      });
+
       return () => clearInterval(interval);
     }
   }, [isSettingsOpen])
