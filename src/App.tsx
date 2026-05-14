@@ -6,6 +6,7 @@ import { NavSidebar } from './renderer/components/NavSidebar'
 import type { ViewType } from './renderer/components/NavSidebar'
 import { ArchiveTree } from './renderer/components/ArchiveTree'
 import { Search, Filter, RefreshCw, Folder } from 'lucide-react'
+import { PdfViewerModal } from './renderer/components/PdfViewerModal'
 
 export interface DocumentType {
   id: number;
@@ -25,6 +26,7 @@ function App() {
   const [searchQuery, setSearchQuery] = useState('')
   const [settings, setSettings] = useState<any>(null)
   const [ollamaStatus, setOllamaStatus] = useState(false)
+  const [pdfViewerDoc, setPdfViewerDoc] = useState<DocumentType | null>(null)
 
   useEffect(() => {
     // Initial load
@@ -70,27 +72,22 @@ function App() {
   };
 
   const filteredDocuments = documents.filter(doc => {
-    if (!settings) return true;
-
-    // Filter by view based on physical path
-    if (currentView === 'inbox') {
-      return doc.last_path.startsWith(settings.INBOX_PATH);
-    }
-    if (currentView === 'sort') {
-      return doc.last_path.startsWith(settings.PROCESSING_PATH);
-    }
-    if (currentView === 'archive') {
-      return doc.last_path.startsWith(settings.ARCHIVE_PATH);
-    }
-
-    // Filter by search
     if (searchQuery) {
       const q = searchQuery.toLowerCase();
-      const fileName = doc.last_path.toLowerCase();
-      const tags = doc.tags.toLowerCase();
-      const metadata = doc.metadata.toLowerCase();
-      return fileName.includes(q) || tags.includes(q) || metadata.includes(q);
+      let meta: any = {};
+      try { meta = doc.metadata ? JSON.parse(doc.metadata) : {}; } catch {}
+      return (
+        doc.last_path.toLowerCase().includes(q) ||
+        (doc.tags || '').toLowerCase().includes(q) ||
+        (meta.sender || '').toLowerCase().includes(q) ||
+        (meta.docType || '').toLowerCase().includes(q) ||
+        (meta.archivePath || '').toLowerCase().includes(q)
+      );
     }
+    if (!settings) return true;
+    if (currentView === 'inbox') return doc.last_path.startsWith(settings.INBOX_PATH);
+    if (currentView === 'sort') return doc.last_path.startsWith(settings.PROCESSING_PATH);
+    if (currentView === 'archive') return doc.last_path.startsWith(settings.ARCHIVE_PATH);
     return true;
   });
 
@@ -145,10 +142,16 @@ function App() {
         <header className="bg-white border-b px-8 py-5 flex items-center justify-between shadow-sm">
           <div>
             <h1 className="text-2xl font-bold text-gray-800">{getTitle()}</h1>
-            <div className="flex items-center text-[11px] text-gray-400 mt-1 font-mono bg-gray-50 px-2 py-0.5 rounded border border-gray-100 w-fit">
-              <Folder className="w-3 h-3 mr-1" />
-              {getCurrentPath()}
-            </div>
+            {searchQuery ? (
+              <p className="text-xs text-blue-500 mt-1">
+                {filteredDocuments.length} Ergebnisse aus allen Bereichen
+              </p>
+            ) : (
+              <div className="flex items-center text-[11px] text-gray-400 mt-1 font-mono bg-gray-50 px-2 py-0.5 rounded border border-gray-100 w-fit">
+                <Folder className="w-3 h-3 mr-1" />
+                {getCurrentPath()}
+              </div>
+            )}
           </div>
 
           <div className="flex items-center space-x-4">
@@ -202,15 +205,23 @@ function App() {
       {/* Sidebar for Metadata */}
       {selectedDoc && (
         <div className="w-[450px] border-l bg-white shadow-2xl flex flex-col z-20 animate-in slide-in-from-right duration-300">
-          <Sidebar 
-            document={selectedDoc} 
+          <Sidebar
+            document={selectedDoc}
             isInbox={currentView === 'inbox'}
             isArchive={currentView === 'archive'}
             onSave={handleSaveAndMove}
             onMoveToProcessing={() => handleMoveToProcessing(selectedDoc.hash)}
+            onOpenPdf={() => setPdfViewerDoc(selectedDoc)}
             onClose={() => setSelectedDoc(null)}
           />
         </div>
+      )}
+      {pdfViewerDoc && (
+        <PdfViewerModal
+          filePath={pdfViewerDoc.last_path}
+          fileName={pdfViewerDoc.last_path.split(/[\\/]/).pop() ?? ''}
+          onClose={() => setPdfViewerDoc(null)}
+        />
       )}
     </div>
   )
