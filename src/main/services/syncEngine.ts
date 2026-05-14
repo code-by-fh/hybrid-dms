@@ -5,6 +5,7 @@ import fsSync from 'fs';
 import crypto from 'crypto';
 import { app } from 'electron';
 import { calculateHash } from './hashService';
+import db from '../db/index.js';
 import { getDocumentByHash, getDocumentByUuid, insertDocumentWithUuid, updateDocumentPath, getAllDocuments, getSetting, updateDocumentMetadata, deleteDocumentByPath, updateDocumentStatus, updateFullText } from '../db/index.js';
 import { analyzeDocumentWithAI, buildFilename } from './aiService.js';
 import { performOCR } from './ocrService.js';
@@ -278,29 +279,78 @@ export function startWatcher(onDbChange?: () => void) {
   return currentWatcher;
 }
 
-// Crawler für Heilungsscan
-export async function runHashCrawler() {
-    console.log("Starting Hash Crawler...");
-    const config = getConfig();
+let crawlerRunning = false;
+
+export function isCrawlerRunning(): boolean {
+  return crawlerRunning;
+}
+
+export async function runUuidCrawler(
+  onStatusChange?: (status: 'running' | 'idle') => void,
+  onDbChange?: () => void
+): Promise<void> {
+  if (crawlerRunning) {
+    console.log('[Crawler] Already running, skipping');
+    return;
+  }
+  crawlerRunning = true;
+  onStatusChange?.('running');
+
+  console.log('[Crawler] Starting UUID scan...');
+  const config = getConfig();
+
+  try {
     const files = await walkDir(config.ARCHIVE_PATH, config.EXCLUDE_FOLDERS);
+    console.log(`[Crawler] Found ${files.length} files in archive`);
+
     for (const filePath of files) {
-        try {
-            const hash = await calculateHash(filePath);
-            const existing = getDocumentByHash(hash);
-            
-            if (existing) {
-                if (existing.last_path !== filePath) {
-                    console.log(`Path change detected for ${hash}: ${existing.last_path} -> ${filePath}`);
-                    updateDocumentPath(hash, filePath);
-                }
-            } else {
-                 console.log(`New file found in archive, indexing: ${filePath}`);
-                 insertDocumentWithUuid(crypto.randomUUID(), hash, filePath, '[]', '{}', 'processed');
+      try {
+        const normalizedPath = path.normalize(filePath);
+        const xmpUuid = await readDocumentUuid(normalizedPath);
+
+        if (xmpUuid) {
+          const existing = getDocumentByUuid(xmpUuid);
+          if (existing) {
+            if (path.normalize(existing.last_path) !== normalizedPath) {
+              console.log(`[Crawler] Path updated for ${xmpUuid}`);
+              updateDocumentPath(existing.hash, normalizedPath);
+              if (onDbChange) onDbChange();
             }
-        } catch (e) {
-            console.error(`Error hashing file ${filePath}:`, e);
+          } else {
+            // UUID in PDF but not in DB (e.g., another computer imported it)
+            const hash = await calculateHash(normalizedPath);
+            insertDocumentWithUuid(xmpUuid, hash, normalizedPath, '[]', '{}', 'processed');
+            if (onDbChange) onDbChange();
+          }
+        } else {
+          // No UUID in PDF — assign one and write it
+          const hash = await calculateHash(normalizedPath);
+          const existingByHash = getDocumentByHash(hash);
+          if (existingByHash) {
+            const uuid = existingByHash.uuid || crypto.randomUUID();
+            if (!existingByHash.uuid) {
+              // Existing row had no uuid — update it in DB
+              db.prepare('UPDATE documents SET uuid = ? WHERE hash = ?').run(uuid, hash);
+            }
+            await writeXmpMetadata(normalizedPath, uuid, existingByHash.tags ? JSON.parse(existingByHash.tags) : []);
+          } else {
+            // Completely new file — generate UUID, write XMP, index as processed
+            const uuid = crypto.randomUUID();
+            await writeXmpMetadata(normalizedPath, uuid, []);
+            insertDocumentWithUuid(uuid, hash, normalizedPath, '[]', '{}', 'processed');
+            if (onDbChange) onDbChange();
+          }
         }
+      } catch (e) {
+        console.error(`[Crawler] Error processing ${filePath}:`, e);
+      }
     }
+
+    console.log(`[Crawler] Done — scanned ${files.length} files`);
+  } finally {
+    crawlerRunning = false;
+    onStatusChange?.('idle');
+  }
 }
 
 /**

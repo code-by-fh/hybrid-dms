@@ -28,6 +28,7 @@ function App() {
   const [settings, setSettings] = useState<any>(null)
   const [ollamaStatus, setOllamaStatus] = useState(false)
   const [pdfViewerDoc, setPdfViewerDoc] = useState<DocumentType | null>(null)
+  const [crawlerRunning, setCrawlerRunning] = useState(false)
 
   useEffect(() => {
     // Initial load
@@ -48,6 +49,13 @@ function App() {
       };
       checkOllama();
       const interval = setInterval(checkOllama, 10000); // every 10s
+
+      // Crawler status
+      ;(window.electronAPI as any).getCrawlerStatus().then((s: { running: boolean }) => setCrawlerRunning(s.running));
+      ;(window.electronAPI as any).onCrawlerStatusChanged((status: 'running' | 'idle') => {
+        setCrawlerRunning(status === 'running');
+      });
+
       return () => clearInterval(interval);
     }
   }, [isSettingsOpen])
@@ -56,6 +64,10 @@ function App() {
     await window.electronAPI.moveToProcessing(hash);
     window.electronAPI.getDocuments().then(setDocuments);
     setSelectedDoc(null);
+  };
+
+  const handleRunCrawler = async () => {
+    await (window.electronAPI as any).runCrawler();
   };
 
   const handleSaveAndMove = async (tags: string, metadata: any) => {
@@ -125,8 +137,8 @@ function App() {
   return (
     <div className="flex h-screen bg-bg-app text-text-main font-sans overflow-hidden transition-colors duration-300">
       {/* Global Navigation */}
-      <NavSidebar 
-        currentView={currentView} 
+      <NavSidebar
+        currentView={currentView}
         onViewChange={(v) => {
           setCurrentView(v);
           setSelectedDoc(null);
@@ -136,6 +148,8 @@ function App() {
         sortCount={sortCount}
         archiveCount={archiveCount}
         ollamaStatus={ollamaStatus}
+        crawlerRunning={crawlerRunning}
+        onRunCrawler={handleRunCrawler}
       />
 
       {/* Main Content Area */}

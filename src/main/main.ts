@@ -3,11 +3,20 @@ import path from 'path';
 import fs from 'fs/promises';
 import { fileURLToPath } from 'url';
 import { initDb, getAllDocuments, getSetting, setSetting, getDocumentByHash, updateDocumentMetadata, updateDocumentPath, updateDocumentStatus } from './db/index.js';
-import { startWatcher, runHashCrawler, getConfig, processPendingDocuments } from './services/syncEngine.js';
+import { startWatcher, runUuidCrawler, isCrawlerRunning, getConfig, processPendingDocuments } from './services/syncEngine.js';
 import { checkOllamaStatus, analyzeDocumentWithAI } from './services/aiService.js';
 import { performOCR } from './services/ocrService.js';
-// Use direct require for pdf-parse as it is a CommonJS module
 import { PDFParse } from 'pdf-parse';
+import { createCanvas, Image } from 'canvas';
+
+// FIX: pdfjs-dist in Node.js needs global.Image and other canvas-related objects 
+// to be set BEFORE it starts rendering, especially for images/masks.
+if (typeof global !== 'undefined') {
+  (global as any).Image = Image;
+  if (!(global as any).HTMLCanvasElement) {
+    (global as any).HTMLCanvasElement = createCanvas(1, 1).constructor;
+  }
+}
 
 // Convert import.meta.url to __dirname equivalent for ES modules
 // But wait, ts-node or electron might use commonjs.
@@ -36,9 +45,19 @@ function createWindow() {
   }
 }
 
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
   // Initialize SQLite
   initDb();
+
+  // Configure pdfjs-dist worker globally
+  try {
+    const pdfjsLib = await import('pdfjs-dist/legacy/build/pdf.mjs');
+    const workerPath = path.join(app.getAppPath(), 'node_modules', 'pdfjs-dist', 'legacy', 'build', 'pdf.worker.mjs');
+    pdfjsLib.GlobalWorkerOptions.workerSrc = workerPath;
+    console.log(`[Main] Global pdfjs worker configured: ${workerPath}`);
+  } catch (e) {
+    console.warn(`[Main] Failed to configure global pdfjs worker`, e);
+  }
 
   // Start Sync Engine Watcher
   startWatcher(() => {
@@ -47,15 +66,13 @@ app.whenReady().then(() => {
       }
   });
 
-  // Start periodic crawler (e.g., every hour, but we'll do 1 minute for testing)
-  setInterval(runHashCrawler, 60 * 1000);
-  
-  // Initial processing
-  runHashCrawler().then(() => {
+  // Run UUID crawler on startup (healing scan + first-time migration), then process pending
+  runUuidCrawler(
+    (status) => { if (mainWindow) mainWindow.webContents.send('crawler-status-changed', status); },
+    () => { if (mainWindow) mainWindow.webContents.send('documents-changed'); }
+  ).then(() => {
     processPendingDocuments(() => {
-      if (mainWindow) {
-        mainWindow.webContents.send('documents-changed');
-      }
+      if (mainWindow) mainWindow.webContents.send('documents-changed');
     });
   });
 
@@ -81,46 +98,38 @@ ipcMain.handle('save-and-move', async (event, { hash, tags, metadata }) => {
         if (!doc) throw new Error("Document not found");
 
         const config = getConfig();
-        let fileName = path.basename(doc.last_path);
-        
-        // Auto-renaming based on metadata if available
-        if (metadata) {
-            const ext = path.extname(doc.last_path);
-            const dateStr = metadata.date ? metadata.date.replace(/[^0-9-]/g, '') : '';
-            const senderStr = metadata.sender ? metadata.sender.replace(/[^a-zA-Z0-9_ -]/g, '_').trim() : '';
-            const typeStr = metadata.docType ? metadata.docType.replace(/[^a-zA-Z0-9_ -]/g, '_').trim() : '';
-            
-            let newNameParts = [];
-            if (dateStr) newNameParts.push(dateStr);
-            if (senderStr) newNameParts.push(senderStr);
-            if (typeStr) newNameParts.push(typeStr);
-            
-            if (newNameParts.length > 0) {
-                fileName = newNameParts.join('_').replace(/\s+/g, '_') + ext;
-            }
-        }
-        
-        let targetPath = path.join(config.ARCHIVE_PATH, fileName);
+        const fileName = path.basename(doc.last_path); // Already renamed by AI pipeline
 
-        // Ensure unique filename to avoid overwrites
+        // Build target directory: ARCHIVE_PATH / archivePath (user-editable subfolder)
+        const archiveSubPath: string = metadata?.archivePath || '';
+        const subDirParts = archiveSubPath
+            .split('/')
+            .map((p: string) => p.trim())
+            .filter(Boolean);
+        const targetDir = path.join(config.ARCHIVE_PATH, ...subDirParts);
+        await fs.mkdir(targetDir, { recursive: true });
+
+        let targetPath = path.join(targetDir, fileName);
+
+        // Ensure unique filename
         let counter = 1;
+        const ext = path.extname(fileName);
+        const base = path.basename(fileName, ext);
         while (await fs.stat(targetPath).then(() => true).catch(() => false) && doc.last_path !== targetPath) {
-           const nameWithoutExt = path.basename(fileName, path.extname(fileName));
-           targetPath = path.join(config.ARCHIVE_PATH, `${nameWithoutExt}_${counter}${path.extname(fileName)}`);
-           counter++;
+            targetPath = path.join(targetDir, `${base}_${counter}${ext}`);
+            counter++;
         }
 
-
-        // Move file if not already in target path
         if (doc.last_path !== targetPath) {
             await fs.rename(doc.last_path, targetPath);
         }
 
-        // Update DB
-        updateDocumentMetadata(hash, JSON.stringify(tags), JSON.stringify(metadata), 'processed');
+        const saveMeta = { ...metadata };
+        delete saveMeta.archivePath; // don't double-store in metadata
+        updateDocumentMetadata(hash, JSON.stringify(tags), JSON.stringify(saveMeta), 'processed');
         updateDocumentPath(hash, targetPath);
 
-        console.log(`Document moved to archive: ${targetPath}`);
+        console.log(`Document archived: ${targetPath}`);
         return { success: true };
     } catch (err) {
         console.error("Save & Move failed:", err);
@@ -263,6 +272,19 @@ ipcMain.handle('rename-file', async (event, { hash, newName }: { hash: string; n
         console.error('Rename file failed:', err);
         return { success: false, error: (err as Error).message };
     }
+});
+
+ipcMain.handle('run-crawler', async () => {
+  if (isCrawlerRunning()) return { running: true };
+  runUuidCrawler(
+    (status) => { if (mainWindow) mainWindow.webContents.send('crawler-status-changed', status); },
+    () => { if (mainWindow) mainWindow.webContents.send('documents-changed'); }
+  );
+  return { started: true };
+});
+
+ipcMain.handle('get-crawler-status', () => {
+  return { running: isCrawlerRunning() };
 });
 
 ipcMain.handle('move-file', async (event, { hash, targetDir }: { hash: string; targetDir: string }) => {

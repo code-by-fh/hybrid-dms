@@ -17,5 +17,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
   retryProcessing: (hash: string) => ipcRenderer.invoke('retry-processing', hash),
   renameFile: (data: { hash: string; newName: string }) => ipcRenderer.invoke('rename-file', data),
   moveFile: (data: { hash: string; targetDir: string }) => ipcRenderer.invoke('move-file', data),
+  runCrawler: () => ipcRenderer.invoke('run-crawler'),
+  getCrawlerStatus: () => ipcRenderer.invoke('get-crawler-status'),
+  onCrawlerStatusChanged: (callback: (status: 'running' | 'idle') => void) => {
+    ipcRenderer.removeAllListeners('crawler-status-changed');
+    ipcRenderer.on('crawler-status-changed', (_event, status) => callback(status));
+  },
 });
 

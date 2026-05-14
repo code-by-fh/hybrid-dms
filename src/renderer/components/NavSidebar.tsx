@@ -1,5 +1,5 @@
 import React from 'react';
-import { Inbox, LayoutGrid, Archive, Settings, Sun, Moon } from 'lucide-react';
+import { Inbox, LayoutGrid, Archive, Settings, Sun, Moon, RefreshCw } from 'lucide-react';
 import { useTheme } from '../contexts/ThemeContext';
 
 export type ViewType = 'inbox' | 'sort' | 'archive';
@@ -12,9 +12,11 @@ interface NavSidebarProps {
   sortCount: number;
   archiveCount: number;
   ollamaStatus: boolean;
+  crawlerRunning: boolean;
+  onRunCrawler: () => void;
 }
 
-export const NavSidebar: React.FC<NavSidebarProps> = ({ currentView, onViewChange, onOpenSettings, inboxCount, sortCount, archiveCount, ollamaStatus }) => {
+export const NavSidebar: React.FC<NavSidebarProps> = ({ currentView, onViewChange, onOpenSettings, inboxCount, sortCount, archiveCount, ollamaStatus, crawlerRunning, onRunCrawler }) => {
   const { theme, toggleTheme } = useTheme();
   const navItems = [
     { id: 'inbox', label: 'Inbox', icon: Inbox, count: inboxCount },
@@ -71,7 +73,16 @@ export const NavSidebar: React.FC<NavSidebarProps> = ({ currentView, onViewChang
           <span className="font-medium">{theme === 'light' ? 'Dark Mode' : 'Light Mode'}</span>
         </button>
 
-        <button 
+        <button
+          onClick={onRunCrawler}
+          disabled={crawlerRunning}
+          title={crawlerRunning ? 'Archiv wird gescannt…' : 'Archiv scannen'}
+          className="p-2 rounded-lg transition-colors text-text-subtle hover:text-accent-primary hover:bg-bg-surface disabled:opacity-40 disabled:cursor-not-allowed"
+        >
+          <RefreshCw className={`w-5 h-5 ${crawlerRunning ? 'animate-spin' : ''}`} />
+        </button>
+
+        <button
           onClick={onOpenSettings}
           className="w-full flex items-center px-4 py-3 rounded-lg hover:bg-bg-app text-text-subtle hover:text-text-main transition-all group"
         >
