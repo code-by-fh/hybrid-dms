@@ -55,7 +55,7 @@ const DraggableFileItem: React.FC<DraggableFileItemProps> = ({
       ref={setNodeRef}
       style={{ paddingLeft: `${level * 1.5 + 1.75}rem`, opacity: isDragging ? 0.4 : 1 }}
       className={`flex items-center py-1.5 px-2 rounded-md transition-colors group ${
-        isSelected ? 'bg-blue-100 text-blue-700' : 'hover:bg-gray-100'
+        isSelected ? 'bg-accent-primary/10 text-accent-primary' : 'hover:bg-bg-app text-text-main'
       }`}
     >
       {/* Drag handle on the icon */}
@@ -65,7 +65,7 @@ const DraggableFileItem: React.FC<DraggableFileItemProps> = ({
         className="cursor-grab mr-2 flex-shrink-0 focus:outline-none"
         title="Ziehen zum Verschieben"
       >
-        <FileText className={`w-4 h-4 ${isSelected ? 'text-blue-600' : 'text-gray-400'}`} />
+        <FileText className={`w-4 h-4 ${isSelected ? 'text-accent-primary' : 'text-text-subtle'}`} />
       </span>
 
       {isRenaming ? (
@@ -78,7 +78,7 @@ const DraggableFileItem: React.FC<DraggableFileItemProps> = ({
               if (e.key === 'Enter') onRenameConfirm(node);
               if (e.key === 'Escape') onRenameCancel();
             }}
-            className="flex-1 text-sm border border-blue-400 rounded px-1.5 py-0.5 outline-none bg-white"
+            className="flex-1 text-sm border border-accent-primary rounded px-1.5 py-0.5 outline-none bg-bg-surface text-text-main"
           />
           <button
             onClick={() => onRenameConfirm(node)}
@@ -99,7 +99,7 @@ const DraggableFileItem: React.FC<DraggableFileItemProps> = ({
         <>
           <span
             className={`text-sm flex-1 cursor-pointer truncate ${
-              isSelected ? 'font-semibold text-blue-700' : 'text-gray-600'
+              isSelected ? 'font-semibold text-accent-primary' : 'text-text-main'
             }`}
             onClick={() => node.document && onSelect(node.document)}
             title={node.name}
@@ -111,7 +111,7 @@ const DraggableFileItem: React.FC<DraggableFileItemProps> = ({
               e.stopPropagation();
               onRenameStart(node);
             }}
-            className="opacity-0 group-hover:opacity-100 p-0.5 hover:text-blue-600 transition-opacity ml-1 flex-shrink-0"
+            className="opacity-0 group-hover:opacity-100 p-0.5 hover:text-accent-primary transition-opacity ml-1 flex-shrink-0"
             title="Umbenennen"
           >
             <Pencil className="w-3.5 h-3.5" />
@@ -145,23 +145,23 @@ const DroppableFolder: React.FC<DroppableFolderProps> = ({
     <div
       ref={setNodeRef}
       className={`select-none rounded-md transition-colors ${
-        isOver ? 'bg-blue-50 ring-2 ring-blue-300 ring-inset' : ''
+        isOver ? 'bg-accent-primary/10 ring-2 ring-accent-primary/30 ring-inset' : ''
       }`}
     >
       <div
-        className="flex items-center py-1.5 px-2 hover:bg-gray-100 cursor-pointer rounded-md"
+        className="flex items-center py-1.5 px-2 hover:bg-bg-app cursor-pointer rounded-md transition-colors"
         style={{ paddingLeft: `${level * 1.5 + 0.5}rem` }}
         onClick={onToggle}
       >
         {isExpanded ? (
-          <ChevronDown className="w-4 h-4 text-gray-500 mr-1 flex-shrink-0" />
+          <ChevronDown className="w-4 h-4 text-text-subtle mr-1 flex-shrink-0" />
         ) : (
-          <ChevronRight className="w-4 h-4 text-gray-500 mr-1 flex-shrink-0" />
+          <ChevronRight className="w-4 h-4 text-text-subtle mr-1 flex-shrink-0" />
         )}
         <Folder
-          className={`w-4 h-4 mr-2 flex-shrink-0 ${isOver ? 'text-blue-500' : 'text-yellow-500'}`}
+          className={`w-4 h-4 mr-2 flex-shrink-0 ${isOver ? 'text-accent-primary' : 'text-yellow-500'}`}
         />
-        <span className="text-sm font-medium text-gray-700 truncate">{node.name}</span>
+        <span className="text-sm font-medium text-text-main truncate">{node.name}</span>
       </div>
       {isExpanded && <div className="flex flex-col">{children}</div>}
     </div>
@@ -313,10 +313,10 @@ export const ArchiveTree: React.FC<ArchiveTreeProps> = ({
 
   return (
     <DndContext onDragEnd={handleDragEnd}>
-      <div className="bg-white rounded-xl shadow-sm border overflow-auto p-4 h-full">
+      <div className="bg-bg-surface rounded-xl shadow-sm border border-border-base overflow-auto p-4 h-full transition-colors duration-300">
         <div className="flex flex-col">{renderNode(tree)}</div>
         {Object.keys(tree.children).length === 0 && (
-          <div className="text-center py-10 text-gray-500 text-sm">
+          <div className="text-center py-10 text-text-subtle text-sm">
             Keine Dokumente im Archiv gefunden.
           </div>
         )}
