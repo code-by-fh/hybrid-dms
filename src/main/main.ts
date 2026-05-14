@@ -77,7 +77,7 @@ function createTray() {
     { label: 'Suche öffnen (Strg+Alt+D)', click: createSearchWindow },
     { label: 'Hauptfenster', click: () => { mainWindow?.show(); mainWindow?.focus(); } },
     { type: 'separator' },
-    { label: 'Beenden', click: () => app.quit() },
+    { label: 'Beenden', click: () => { (app as any).isQuitting = true; app.quit(); } },
   ]);
   tray.setToolTip('DMS Dokumentenarchiv');
   tray.setContextMenu(menu);
@@ -94,6 +94,14 @@ function createWindow() {
       contextIsolation: true,
       webSecurity: false // allow local file loading for pdf viewer
     },
+  });
+
+  // Hide to tray instead of quitting when main window is closed
+  mainWindow.on('close', (event) => {
+    if (!(app as any).isQuitting) {
+      event.preventDefault();
+      mainWindow?.hide();
+    }
   });
 
   if (process.env.VITE_DEV_SERVER_URL) {

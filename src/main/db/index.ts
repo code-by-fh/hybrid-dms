@@ -139,7 +139,7 @@ export function updateFullText(uuid: string, fullText: string) {
 export function searchDocuments(query: string): any[] {
   try {
     return db.prepare(`
-      SELECT d.uuid, d.last_path, d.tags, d.metadata, d.status,
+      SELECT d.*,
              snippet(documents_fts, 1, '<mark>', '</mark>', '...', 20) AS snippet
       FROM documents_fts f
       JOIN documents d ON d.uuid = f.uuid

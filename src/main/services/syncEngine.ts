@@ -180,7 +180,7 @@ export function startWatcher(onDbChange?: () => void) {
   console.log(`[Sync] Starting watcher for paths:`, watchPaths);
   
   currentWatcher = chokidar.watch(watchPaths, {
-    ignored: /(^|[\/\\])\../, // ignore dotfiles
+    ignored: [/(^|[\/\\])\.\./, /\.dmstmp$/],
     persistent: true,
     awaitWriteFinish: true,
   });
