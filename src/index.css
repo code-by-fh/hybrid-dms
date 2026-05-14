@@ -2,10 +2,39 @@
 
 @theme {
   --font-sans: "Inter", system-ui, sans-serif;
+  
+  /* Map CSS variables to Tailwind classes */
+  --color-bg-app: var(--bg-app);
+  --color-bg-surface: var(--bg-surface);
+  --color-text-main: var(--text-main);
+  --color-text-subtle: var(--text-subtle);
+  --color-border-base: var(--border-base);
+  --color-accent-primary: var(--accent);
+}
+
+:root {
+  --bg-app: #f8fafc;
+  --bg-surface: #ffffff;
+  --text-main: #0f172a;
+  --text-subtle: #64748b;
+  --border-base: #e2e8f0;
+  --accent: #3b82f6;
+}
+
+.dark {
+  --bg-app: #020617;
+  --bg-surface: #0f172a;
+  --text-main: #f1f5f9;
+  --text-subtle: #94a3b8;
+  --border-base: #1e293b;
+  --accent: #60a5fa;
 }
 
 body {
   margin: 0;
   padding: 0;
-  background-color: #f3f4f6; /* bg-gray-100 */
+  background-color: var(--bg-app);
+  color: var(--text-main);
+  transition: background-color 0.3s, color 0.3s;
 }
+
