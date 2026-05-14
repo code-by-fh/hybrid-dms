@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { ChevronRight, ChevronDown, Folder, FileText, Pencil, Check, X as XIcon } from 'lucide-react';
-import { DndContext, DragEndEvent, useDraggable, useDroppable } from '@dnd-kit/core';
+import { DndContext, useDraggable, useDroppable } from '@dnd-kit/core';
+import type { DragEndEvent } from '@dnd-kit/core';
 import type { DocumentType } from '../../App';
 
 interface TreeNode {
