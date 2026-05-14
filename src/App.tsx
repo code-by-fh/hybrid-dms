@@ -10,6 +10,7 @@ import { PdfViewerModal } from './renderer/components/PdfViewerModal'
 
 export interface DocumentType {
   id: number;
+  uuid: string;
   hash: string;
   last_path: string;
   tags: string;
