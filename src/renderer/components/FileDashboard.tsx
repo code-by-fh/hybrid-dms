@@ -11,11 +11,11 @@ interface FileDashboardProps {
 
 export const FileDashboard: React.FC<FileDashboardProps> = ({ documents, selectedDoc, onSelect }) => {
   return (
-    <div className="bg-white rounded-lg shadow border overflow-hidden">
+    <div className="bg-bg-surface rounded-lg shadow border border-border-base overflow-hidden transition-colors duration-300">
       <table className="w-full text-left border-collapse">
         <thead>
-          <tr className="bg-gray-50 border-b text-gray-600 text-sm">
-            <th className="py-3 px-4 font-semibold">File</th>
+          <tr className="bg-bg-app border-b border-border-base text-text-subtle text-sm">
+            <th className="py-3 px-4 font-semibold min-w-[300px]">File</th>
             <th className="py-3 px-4 font-semibold">Status</th>
             <th className="py-3 px-4 font-semibold">Tags</th>
             <th className="py-3 px-4 font-semibold">Added</th>
@@ -24,9 +24,9 @@ export const FileDashboard: React.FC<FileDashboardProps> = ({ documents, selecte
         <tbody>
           {documents.length === 0 ? (
             <tr>
-              <td colSpan={4} className="py-12 text-center text-gray-500">
+              <td colSpan={4} className="py-12 text-center text-text-subtle">
                 <div className="flex flex-col items-center justify-center">
-                  <File className="w-12 h-12 text-gray-300 mb-3" />
+                  <File className="w-12 h-12 text-text-subtle/30 mb-3" />
                   <p>No documents found in Inbox.</p>
                 </div>
               </td>
@@ -45,14 +45,14 @@ export const FileDashboard: React.FC<FileDashboardProps> = ({ documents, selecte
                 <tr 
                   key={doc.id} 
                   onClick={() => onSelect(doc)}
-                  className={`border-b last:border-b-0 cursor-pointer transition-colors ${isSelected ? 'bg-blue-50 border-blue-200' : 'hover:bg-gray-50'}`}
+                  className={`border-b border-border-base last:border-b-0 cursor-pointer transition-colors ${isSelected ? 'bg-accent-primary/10 border-accent-primary' : 'hover:bg-bg-app'}`}
                 >
                   <td className="py-3 px-4">
                     <div className="flex items-center space-x-3">
                       <div className={`p-2 rounded ${isNew ? 'bg-amber-100 text-amber-600' : 'bg-green-100 text-green-600'}`}>
                         <File className="w-5 h-5" />
                       </div>
-                      <span className="font-medium truncate max-w-[200px]" title={doc.last_path}>
+                      <span className="font-medium truncate max-w-[450px]" title={doc.last_path}>
                         {doc.last_path.split(/[\\/]/).pop()}
                       </span>
                     </div>
@@ -83,18 +83,18 @@ export const FileDashboard: React.FC<FileDashboardProps> = ({ documents, selecte
                   <td className="py-3 px-4">
                     <div className="flex gap-1 flex-wrap">
                       {tagsArray.slice(0, 2).map((tag: string, i: number) => (
-                         <span key={i} className="inline-flex items-center px-2 py-0.5 rounded text-xs bg-gray-100 text-gray-600 border">
+                         <span key={i} className="inline-flex items-center px-2 py-0.5 rounded text-xs bg-bg-app text-text-subtle border border-border-base">
                            <TagIcon className="w-3 h-3 mr-1" /> {tag}
                          </span>
                       ))}
                       {tagsArray.length > 2 && (
-                        <span className="inline-flex items-center px-2 py-0.5 rounded text-xs bg-gray-100 text-gray-600 border">
+                        <span className="inline-flex items-center px-2 py-0.5 rounded text-xs bg-bg-app text-text-subtle border border-border-base">
                           +{tagsArray.length - 2}
                         </span>
                       )}
                     </div>
                   </td>
-                  <td className="py-3 px-4 text-gray-500 text-sm">
+                  <td className="py-3 px-4 text-text-subtle text-sm">
                     <div className="flex items-center">
                       <Clock className="w-4 h-4 mr-1.5" />
                       {new Date(doc.indexed_at).toLocaleDateString()}
