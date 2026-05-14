@@ -122,7 +122,7 @@ function App() {
   }
 
   return (
-    <div className="flex h-screen bg-gray-50 text-gray-900 font-sans overflow-hidden">
+    <div className="flex h-screen bg-bg-app text-text-main font-sans overflow-hidden transition-colors duration-300">
       {/* Global Navigation */}
       <NavSidebar 
         currentView={currentView} 
@@ -139,15 +139,15 @@ function App() {
 
       {/* Main Content Area */}
       <div className="flex-1 flex flex-col min-w-0">
-        <header className="bg-white border-b px-8 py-5 flex items-center justify-between shadow-sm">
+        <header className="bg-bg-surface border-b border-border-base px-8 py-5 flex items-center justify-between shadow-sm z-10 transition-colors duration-300">
           <div>
-            <h1 className="text-2xl font-bold text-gray-800">{getTitle()}</h1>
+            <h1 className="text-2xl font-bold text-text-main">{getTitle()}</h1>
             {searchQuery ? (
-              <p className="text-xs text-blue-500 mt-1">
+              <p className="text-xs text-accent-primary mt-1">
                 {filteredDocuments.length} Ergebnisse aus allen Bereichen
               </p>
             ) : (
-              <div className="flex items-center text-[11px] text-gray-400 mt-1 font-mono bg-gray-50 px-2 py-0.5 rounded border border-gray-100 w-fit">
+              <div className="flex items-center text-[11px] text-text-subtle mt-1 font-mono bg-bg-app px-2 py-0.5 rounded border border-border-base w-fit">
                 <Folder className="w-3 h-3 mr-1" />
                 {getCurrentPath()}
               </div>
@@ -156,21 +156,21 @@ function App() {
 
           <div className="flex items-center space-x-4">
             <div className="relative group">
-              <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 group-focus-within:text-blue-500 transition-colors" />
+              <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-text-subtle group-focus-within:text-accent-primary transition-colors" />
               <input 
                 type="text"
                 placeholder="Volltextsuche..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="pl-10 pr-4 py-2 bg-gray-100 border-transparent border focus:bg-white focus:border-blue-500 focus:ring-4 focus:ring-blue-100 rounded-xl outline-none w-64 transition-all"
+                className="pl-10 pr-4 py-2 bg-bg-app border-border-base border focus:bg-bg-surface focus:border-accent-primary focus:ring-4 focus:ring-accent-primary/10 rounded-xl outline-none w-64 transition-all text-text-main"
               />
             </div>
-            <button className="p-2 hover:bg-gray-100 rounded-lg text-gray-500" title="Filter">
+            <button className="p-2 hover:bg-bg-app rounded-lg text-text-subtle transition-colors" title="Filter">
               <Filter className="w-5 h-5" />
             </button>
             <button 
               onClick={() => window.electronAPI.getDocuments().then(docs => setDocuments(docs))}
-              className="p-2 hover:bg-gray-100 rounded-lg text-gray-500 hover:text-blue-600 transition-colors" 
+              className="p-2 hover:bg-bg-app rounded-lg text-text-subtle hover:text-accent-primary transition-colors" 
               title="Aktualisieren"
             >
               <RefreshCw className="w-5 h-5" />
@@ -204,7 +204,7 @@ function App() {
 
       {/* Sidebar for Metadata */}
       {selectedDoc && (
-        <div className="w-[450px] border-l bg-white shadow-2xl flex flex-col z-20 animate-in slide-in-from-right duration-300">
+        <div className="w-[450px] border-l border-border-base bg-bg-surface shadow-2xl flex flex-col z-20 animate-in slide-in-from-right duration-300">
           <Sidebar
             document={selectedDoc}
             isInbox={currentView === 'inbox'}
