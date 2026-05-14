@@ -5,8 +5,7 @@ import fsSync from 'fs';
 import crypto from 'crypto';
 import { app } from 'electron';
 import { calculateHash } from './hashService';
-import db from '../db/index.js';
-import { getDocumentByHash, getDocumentByUuid, insertDocumentWithUuid, updateDocumentPath, getAllDocuments, getSetting, updateDocumentMetadata, deleteDocumentByPath, updateDocumentStatus, updateFullText } from '../db/index.js';
+import { getDocumentByHash, getDocumentByUuid, insertDocumentWithUuid, updateDocumentPath, getAllDocuments, getSetting, updateDocumentMetadata, deleteDocumentByPath, updateDocumentStatus, updateFullText, updateDocumentUuid } from '../db/index.js';
 import { analyzeDocumentWithAI, buildFilename } from './aiService.js';
 import { performOCR } from './ocrService.js';
 import { readDocumentUuid, writeXmpMetadata } from './xmpService.js';
@@ -311,7 +310,7 @@ export async function runUuidCrawler(
         if (xmpUuid) {
           const existing = getDocumentByUuid(xmpUuid);
           if (existing) {
-            if (path.normalize(existing.last_path) !== normalizedPath) {
+            if (path.normalize(existing.last_path).toLowerCase() !== normalizedPath.toLowerCase()) {
               console.log(`[Crawler] Path updated for ${xmpUuid}`);
               updateDocumentPath(existing.hash, normalizedPath);
               if (onDbChange) onDbChange();
@@ -330,7 +329,7 @@ export async function runUuidCrawler(
             const uuid = existingByHash.uuid || crypto.randomUUID();
             if (!existingByHash.uuid) {
               // Existing row had no uuid — update it in DB
-              db.prepare('UPDATE documents SET uuid = ? WHERE hash = ?').run(uuid, hash);
+              updateDocumentUuid(hash, uuid);
             }
             await writeXmpMetadata(normalizedPath, uuid, existingByHash.tags ? JSON.parse(existingByHash.tags) : []);
           } else {

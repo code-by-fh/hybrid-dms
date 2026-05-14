@@ -66,6 +66,8 @@ app.whenReady().then(async () => {
       }
   });
 
+  createWindow();
+
   // Run UUID crawler on startup (healing scan + first-time migration), then process pending
   runUuidCrawler(
     (status) => { if (mainWindow) mainWindow.webContents.send('crawler-status-changed', status); },
@@ -75,8 +77,6 @@ app.whenReady().then(async () => {
       if (mainWindow) mainWindow.webContents.send('documents-changed');
     });
   });
-
-  createWindow();
 
   app.on('activate', function () {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();

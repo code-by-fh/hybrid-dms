@@ -162,4 +162,9 @@ export function getUuidByHash(hash: string): string | null {
   return row ? row.uuid : null;
 }
 
+export function updateDocumentUuid(hash: string, uuid: string) {
+  db.prepare('UPDATE documents SET uuid = ? WHERE hash = ?').run(hash, uuid);
+  db.prepare("INSERT OR IGNORE INTO documents_fts (uuid, full_text) VALUES (?, '')").run(uuid);
+}
+
 export default db;
