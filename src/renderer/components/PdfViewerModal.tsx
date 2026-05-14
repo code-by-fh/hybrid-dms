@@ -4,10 +4,7 @@ import 'react-pdf/dist/Page/AnnotationLayer.css';
 import 'react-pdf/dist/Page/TextLayer.css';
 import { X, ChevronLeft, ChevronRight, ZoomIn, ZoomOut } from 'lucide-react';
 
-pdfjs.GlobalWorkerOptions.workerSrc = new URL(
-  'pdfjs-dist/build/pdf.worker.min.mjs',
-  import.meta.url,
-).toString();
+pdfjs.GlobalWorkerOptions.workerSrc = '/pdf.worker.min.mjs';
 
 interface PdfViewerModalProps {
   filePath: string;
@@ -34,7 +31,8 @@ export const PdfViewerModal: React.FC<PdfViewerModalProps> = ({ filePath, fileNa
   }, [handleKeyDown]);
 
   return (
-    <div className="fixed inset-0 z-50 flex flex-col bg-gray-900">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
+      <div className="flex flex-col bg-gray-900 rounded-xl overflow-hidden shadow-2xl" style={{ width: '80%', height: '85%' }}>
       {/* Toolbar */}
       <div className="flex items-center justify-between px-6 py-3 bg-gray-800 border-b border-gray-700 shrink-0">
         <span className="text-white font-medium text-sm truncate max-w-xs">{fileName}</span>
@@ -101,6 +99,7 @@ export const PdfViewerModal: React.FC<PdfViewerModalProps> = ({ filePath, fileNa
             renderAnnotationLayer={true}
           />
         </Document>
+      </div>
       </div>
     </div>
   );
