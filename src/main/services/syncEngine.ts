@@ -288,7 +288,7 @@ export async function runHashCrawler() {
                 }
             } else {
                  console.log(`New file found in archive, indexing: ${filePath}`);
-                 insertDocument(hash, filePath, '[]', '{}', 'processed');
+                 insertDocumentWithUuid(crypto.randomUUID(), hash, filePath, '[]', '{}', 'processed');
             }
         } catch (e) {
             console.error(`Error hashing file ${filePath}:`, e);
