@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { FileDashboard } from './renderer/components/FileDashboard'
 import { Sidebar } from './renderer/components/Sidebar'
 import { SettingsModal } from './renderer/components/SettingsModal'
@@ -21,6 +21,7 @@ export interface DocumentType {
 
 function App() {
   const [documents, setDocuments] = useState<DocumentType[]>([])
+  const documentsRef = useRef<DocumentType[]>([])
   const [selectedDoc, setSelectedDoc] = useState<DocumentType | null>(null)
   const [isSettingsOpen, setIsSettingsOpen] = useState(false)
   const [currentView, setCurrentView] = useState<ViewType>('inbox')
@@ -34,13 +35,14 @@ function App() {
   useEffect(() => {
     // Initial load
     if (window.electronAPI) {
-      window.electronAPI.getDocuments().then(docs => setDocuments(docs))
+      window.electronAPI.getDocuments().then(docs => { setDocuments(docs); documentsRef.current = docs; })
       window.electronAPI.getSettings().then(setSettings)
       
       // Listen for document changes
       window.electronAPI.onDocumentsChanged(() => {
         window.electronAPI.getDocuments().then(docs => {
           setDocuments(docs);
+          documentsRef.current = docs;
         });
       });
       
@@ -58,7 +60,7 @@ function App() {
       });
 
       ;(window.electronAPI as any).onOpenDocumentByUuid?.((uuid: string) => {
-        const doc = documents.find(d => d.uuid === uuid);
+        const doc = documentsRef.current.find(d => d.uuid === uuid);
         if (doc) setSelectedDoc(doc);
       });
 

@@ -59,7 +59,13 @@ function createSearchWindow() {
     searchWindow.loadFile(path.join(__dirname, 'dist', 'src', 'search.html'));
   }
 
-  searchWindow.on('blur', () => searchWindow?.hide());
+  let blurTimer: ReturnType<typeof setTimeout> | null = null;
+  searchWindow.on('blur', () => {
+    blurTimer = setTimeout(() => searchWindow?.hide(), 150);
+  });
+  searchWindow.on('focus', () => {
+    if (blurTimer) { clearTimeout(blurTimer); blurTimer = null; }
+  });
 }
 
 function createTray() {
@@ -120,7 +126,11 @@ app.whenReady().then(async () => {
   });
 
   createWindow();
-  createTray();
+  try {
+    createTray();
+  } catch (e) {
+    console.warn('[Main] Tray creation failed (icon missing?):', e);
+  }
   globalShortcut.register('CommandOrControl+Alt+D', createSearchWindow);
 
   // Run UUID crawler on startup (healing scan + first-time migration), then process pending
@@ -406,4 +416,8 @@ ipcMain.on('open-document-from-tray', (_event, uuid: string) => {
   mainWindow?.show();
   mainWindow?.focus();
   mainWindow?.webContents.send('open-document-by-uuid', uuid);
+});
+
+ipcMain.on('hide-search-window', () => {
+  searchWindow?.hide();
 });

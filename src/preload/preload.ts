@@ -29,5 +29,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.removeAllListeners('open-document-by-uuid');
     ipcRenderer.on('open-document-by-uuid', (_event, uuid) => callback(uuid));
   },
+  hideSearchWindow: () => ipcRenderer.send('hide-search-window'),
 });
 

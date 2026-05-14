@@ -60,7 +60,7 @@ export const SearchWindow: React.FC = () => {
           onChange={e => setQuery(e.target.value)}
           placeholder="Dokument suchen…"
           className="flex-1 bg-transparent outline-none text-text-main placeholder:text-text-subtle text-sm"
-          onKeyDown={e => { if (e.key === 'Escape') window.close(); }}
+          onKeyDown={e => { if (e.key === 'Escape') (window.electronAPI as any).hideSearchWindow?.(); }}
         />
         {loading && <div className="w-3 h-3 border-2 border-accent-primary border-t-transparent rounded-full animate-spin" />}
       </div>
