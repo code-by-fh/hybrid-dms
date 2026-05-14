@@ -145,6 +145,8 @@ function App() {
         onViewChange={(v) => {
           setCurrentView(v);
           setSelectedDoc(null);
+          setSearchQuery('');
+          setFtsResults(null);
         }}
         onOpenSettings={() => setIsSettingsOpen(true)}
         inboxCount={inboxCount}

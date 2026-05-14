@@ -132,9 +132,9 @@ ipcMain.handle('save-and-move', async (event, { hash, tags, metadata }) => {
 
         // Write updated tags + UUID to PDF XMP (non-fatal)
         try {
-          const doc2 = getDocumentByHash(hash);
-          if (doc2?.uuid) {
-            await writeXmpMetadata(targetPath, doc2.uuid, Array.isArray(tags) ? tags : JSON.parse(tags as any));
+          if (doc.uuid) {
+            const tagsArray = Array.isArray(tags) ? tags : JSON.parse(tags as any);
+            await writeXmpMetadata(targetPath, doc.uuid, tagsArray);
           }
         } catch (xmpErr) {
           console.warn('[save-and-move] XMP write failed (non-fatal):', xmpErr);
@@ -282,7 +282,9 @@ ipcMain.handle('rename-file', async (event, { hash, newName }: { hash: string; n
         try {
           const renamedDoc = getDocumentByHash(hash);
           if (renamedDoc?.uuid) {
-            await writeXmpMetadata(newPath, renamedDoc.uuid, renamedDoc.tags ? JSON.parse(renamedDoc.tags) : []);
+            let parsedTags: string[] = [];
+            try { parsedTags = renamedDoc.tags ? JSON.parse(renamedDoc.tags) : []; } catch { parsedTags = []; }
+            await writeXmpMetadata(newPath, renamedDoc.uuid, parsedTags);
           }
         } catch (xmpErr) {
           console.warn('[rename-file] XMP write failed (non-fatal):', xmpErr);
@@ -309,8 +311,13 @@ ipcMain.handle('get-crawler-status', () => {
 
 ipcMain.handle('search-documents', async (_event, query: string) => {
   if (!query || query.trim().length < 2) return [];
-  // Append wildcard for prefix matching; escape special FTS5 operators
-  const safeQuery = query.trim().replace(/["*^]/g, '') + '*';
+  // Append wildcard for prefix matching; strip FTS5 special characters
+  const sanitized = query.trim()
+    .replace(/["*^(){}\[\]:!]/g, '')         // strip FTS5 special characters
+    .replace(/\b(AND|OR|NOT)\b/gi, '')       // strip boolean operators
+    .trim();
+  if (!sanitized) return [];
+  const safeQuery = sanitized + '*';
   return searchDocuments(safeQuery);
 });
 
