@@ -5,7 +5,7 @@ import fsSync from 'fs';
 import crypto from 'crypto';
 import { app } from 'electron';
 import { calculateHash } from './hashService';
-import { getDocumentByHash, getDocumentByUuid, insertDocumentWithUuid, updateDocumentPath, getAllDocuments, getSetting, updateDocumentMetadata, deleteDocumentByPath, updateDocumentStatus, updateFullText, getUuidByHash } from '../db/index.js';
+import { getDocumentByHash, getDocumentByUuid, insertDocumentWithUuid, updateDocumentPath, getAllDocuments, getSetting, updateDocumentMetadata, deleteDocumentByPath, updateDocumentStatus, updateFullText } from '../db/index.js';
 import { analyzeDocumentWithAI, buildFilename } from './aiService.js';
 import { performOCR } from './ocrService.js';
 import { readDocumentUuid, writeXmpMetadata } from './xmpService.js';
@@ -141,16 +141,9 @@ async function processInboxFile(uuid: string, hash: string, normalizedPath: stri
 
   updateDocumentMetadata(hash, JSON.stringify(tags), aiMetadata, 'new');
 
-  // Write UUID + tags to PDF XMP
-  try {
-    await writeXmpMetadata(normalizedPath, uuid, tags);
-  } catch (xmpErr) {
-    console.warn(`[Pipeline] XMP write failed (non-fatal):`, xmpErr);
-  }
-
   const processingPath = path.join(config.PROCESSING_PATH, newFileName);
+  let finalProcessingPath = processingPath;
   try {
-    let finalProcessingPath = processingPath;
     let counter = 1;
     while (await fs.stat(finalProcessingPath).then(() => true).catch(() => false)) {
       const nameWithoutExt = path.basename(newFileName, ext);
@@ -162,6 +155,14 @@ async function processInboxFile(uuid: string, hash: string, normalizedPath: stri
     console.log(`[Pipeline] Moved to Sortieren: ${finalProcessingPath}`);
   } catch (moveErr) {
     console.error(`[Pipeline] Move failed:`, moveErr);
+    finalProcessingPath = normalizedPath; // XMP write still uses original path if move failed
+  }
+
+  // Write UUID + tags to PDF XMP after move (avoids watcher re-trigger from temp file in inbox)
+  try {
+    await writeXmpMetadata(finalProcessingPath, uuid, tags);
+  } catch (xmpErr) {
+    console.warn(`[Pipeline] XMP write failed (non-fatal):`, xmpErr);
   }
 
   if (onDbChange) onDbChange();
@@ -196,11 +197,17 @@ export function startWatcher(onDbChange?: () => void) {
       if (xmpUuid) {
         const existing = getDocumentByUuid(xmpUuid);
         if (existing) {
-          if (path.normalize(existing.last_path).toLowerCase() !== filePathLower) {
-            updateDocumentPath(existing.hash, normalizedPath);
-            if (onDbChange) onDbChange();
+          if (!isInInboxDir) {
+            // Known file outside inbox — update path if changed, done
+            if (path.normalize(existing.last_path).toLowerCase() !== filePathLower) {
+              updateDocumentPath(existing.hash, normalizedPath);
+              if (onDbChange) onDbChange();
+            }
+            return;
           }
-          if (!isInInboxDir) return; // Known file outside inbox — path updated, done
+          // Known file back in inbox — delete record so it can be reprocessed fresh
+          deleteDocumentByPath(existing.last_path);
+          // Fall through to new-file pipeline below
         }
       }
 
@@ -313,8 +320,8 @@ export async function processPendingDocuments(onDbChange?: () => void) {
             metadata = {};
         }
 
-        const isInBox = doc.last_path.startsWith(config.INBOX_PATH);
-        const isInSortieren = doc.last_path.startsWith(config.PROCESSING_PATH);
+        const isInBox = doc.last_path.startsWith(config.INBOX_PATH + path.sep);
+        const isInSortieren = doc.last_path.startsWith(config.PROCESSING_PATH + path.sep);
 
         // Reset stuck processing states for docs already in Sortieren
         if (isInSortieren && (doc.status === 'ocr_processing' || doc.status === 'ai_processing')) {
