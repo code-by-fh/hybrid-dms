@@ -68,30 +68,41 @@ export function startWatcher(onDbChange?: () => void) {
       const config = getConfig();
       const normalizedInbox = path.normalize(config.INBOX_PATH);
       const normalizedProcessing = path.normalize(config.PROCESSING_PATH);
-      console.log(`[DEBUG][Watcher] INBOX_PATH   = ${normalizedInbox}`);
+
+      // Case-insensitive comparison for Windows (drive letter C: vs c:)
+      const filePathLower = normalizedPath.toLowerCase();
+      const inboxPathLower = normalizedInbox.toLowerCase();
+      const isInInboxDir = filePathLower.startsWith(inboxPathLower);
+
+      console.log(`[DEBUG][Watcher] INBOX_PATH      = ${normalizedInbox}`);
       console.log(`[DEBUG][Watcher] PROCESSING_PATH = ${normalizedProcessing}`);
-      console.log(`[DEBUG][Watcher] File starts with inbox? ${normalizedPath.startsWith(normalizedInbox)}`);
+      console.log(`[DEBUG][Watcher] Datei liegt im Inbox-Ordner? ${isInInboxDir}`);
+      if (!isInInboxDir) {
+        console.log(`[DEBUG][Watcher] MISMATCH DETAIL:`);
+        console.log(`[DEBUG][Watcher]   Datei-Pfad (lower): ${filePathLower}`);
+        console.log(`[DEBUG][Watcher]   Inbox-Pfad (lower): ${inboxPathLower}`);
+      }
 
       // --- Already known? ---
       const existing = getDocumentByHash(hash);
       if (existing) {
-        console.log(`[DEBUG][Watcher] Already in DB — checking path update`);
-        if (path.normalize(existing.last_path) !== normalizedPath) {
-          console.log(`[DEBUG][Watcher] Path changed: ${existing.last_path} -> ${normalizedPath}`);
+        console.log(`[DEBUG][Watcher] Bereits in DB — Pfad prüfen`);
+        if (path.normalize(existing.last_path).toLowerCase() !== filePathLower) {
+          console.log(`[DEBUG][Watcher] Pfad geändert: ${existing.last_path} -> ${normalizedPath}`);
           updateDocumentPath(hash, normalizedPath);
           if (onDbChange) onDbChange();
         } else {
-          console.log(`[DEBUG][Watcher] Same path, nothing to do.`);
+          console.log(`[DEBUG][Watcher] Gleicher Pfad, nichts zu tun.`);
         }
         console.log(`[DEBUG][Watcher] ========================================\n`);
         return;
       }
 
-      const isInbox = normalizedPath.startsWith(normalizedInbox);
-      console.log(`[DEBUG][Watcher] New file. isInbox=${isInbox}`);
+      const isInbox = isInInboxDir;
+      console.log(`[DEBUG][Watcher] Neue Datei. isInbox=${isInbox}`);
 
       if (!isInbox) {
-        console.log(`[DEBUG][Watcher] Outside inbox — indexing as processed.`);
+        console.log(`[DEBUG][Watcher] Außerhalb Inbox — als 'processed' indexieren.`);
         insertDocument(hash, normalizedPath, '[]', '{}', 'processed');
         if (onDbChange) onDbChange();
         console.log(`[DEBUG][Watcher] ========================================\n`);
