@@ -5,6 +5,7 @@ import { fileURLToPath } from 'url';
 import { initDb, getAllDocuments, getSetting, setSetting, getDocumentByHash, updateDocumentMetadata, updateDocumentPath, updateDocumentStatus, searchDocuments } from './db/index.js';
 import { writeXmpMetadata } from './services/xmpService.js';
 import { startWatcher, runUuidCrawler, isCrawlerRunning, getConfig, processPendingDocuments } from './services/syncEngine.js';
+import { initLogger, getLogPath, setLogPath, log } from './services/logger.js';
 import { checkOllamaStatus, analyzeDocumentWithAI } from './services/aiService.js';
 import { performOCR } from './services/ocrService.js';
 import { PDFParse } from 'pdf-parse';
@@ -115,6 +116,9 @@ function createWindow() {
 app.whenReady().then(async () => {
   // Initialize SQLite
   initDb();
+  // Initialize file logger
+  initLogger();
+  log('info', '[Main] App starting');
 
   // Configure pdfjs-dist worker globally
   try {
@@ -418,6 +422,23 @@ ipcMain.handle('move-file', async (event, { hash, targetDir }: { hash: string; t
         console.error('Move file failed:', err);
         return { success: false, error: (err as Error).message };
     }
+});
+
+ipcMain.handle('get-log-path', () => {
+  return getLogPath();
+});
+
+ipcMain.handle('set-log-path', (_event, newPath: string) => {
+  setLogPath(newPath);
+  return { success: true };
+});
+
+ipcMain.handle('open-log-file', async () => {
+  const { shell } = await import('electron');
+  const filePath = getLogPath();
+  if (!filePath) return { success: false, error: 'No log path configured' };
+  const result = await shell.openPath(filePath);
+  return { success: result === '' };
 });
 
 ipcMain.on('open-document-from-tray', (_event, uuid: string) => {
