@@ -20,6 +20,11 @@ export function getConfig() {
     EXCLUDE_FOLDERS: getSetting('EXCLUDE_FOLDERS', '').split(',').map(s => s.trim()).filter(Boolean),
     OLLAMA_URL: getSetting('OLLAMA_URL', 'http://localhost:11434'),
     OLLAMA_MODEL: getSetting('OLLAMA_MODEL', 'llama3.2'),
+    AI_BACKEND: getSetting('AI_BACKEND', 'ollama'),
+    AI_URL: getSetting('AI_URL', getSetting('OLLAMA_URL', 'http://localhost:11434')),
+    AI_MODEL_NAME: getSetting('AI_MODEL_NAME', getSetting('OLLAMA_MODEL', 'llama3.2')),
+    GGUF_MODEL_PATH: getSetting('GGUF_MODEL_PATH', ''),
+    OCR_LANGUAGES: getSetting('OCR_LANGUAGES', 'deu+eng'),
   };
   return config;
 }
