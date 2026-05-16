@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { X, Folder, Save, Trash2 } from 'lucide-react';
+import { X, Folder, Save, Trash2, FileText } from 'lucide-react';
 
 interface SettingsModalProps {
   onClose: () => void;
@@ -12,6 +12,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
   const [excludeFolders, setExcludeFolders] = useState('');
   const [ollamaUrl, setOllamaUrl] = useState('');
   const [ollamaModel, setOllamaModel] = useState('');
+  const [logPath, setLogPath] = useState('');
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -22,6 +23,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
       setExcludeFolders(settings.EXCLUDE_FOLDERS ? settings.EXCLUDE_FOLDERS.join(', ') : '');
       setOllamaUrl(settings.OLLAMA_URL || 'http://localhost:11434');
       setOllamaModel(settings.OLLAMA_MODEL || 'llama3.2');
+      (window.electronAPI as any).getLogPath().then((p: string) => setLogPath(p || ''));
       setLoading(false);
     });
   }, []);
@@ -42,6 +44,9 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
       OLLAMA_URL: ollamaUrl,
       OLLAMA_MODEL: ollamaModel,
     });
+    if (logPath) {
+      await (window.electronAPI as any).setLogPath(logPath);
+    }
     onClose();
   };
 
@@ -159,6 +164,39 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
                 </div>
               </div>
               <p className="text-xs text-gray-500 mt-2">Die KI wird zur automatischen Dokumentenanalyse und Verschlagwortung genutzt.</p>
+            </div>
+
+            <div className="border-t pt-4 mt-4">
+              <h3 className="text-md font-bold text-gray-800 mb-4 flex items-center">
+                <FileText className="w-4 h-4 mr-2 text-blue-600" />
+                Protokoll & Logs
+              </h3>
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-2">Log-Datei Pfad</label>
+                <div className="flex space-x-2">
+                  <input
+                    type="text"
+                    value={logPath}
+                    onChange={e => setLogPath(e.target.value)}
+                    className="flex-1 px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-sm font-mono"
+                    placeholder="Standardpfad wird automatisch verwendet"
+                  />
+                  <button
+                    onClick={() => handlePickPath(setLogPath)}
+                    className="px-4 py-2 bg-gray-100 hover:bg-gray-200 rounded-lg border transition-colors flex items-center"
+                  >
+                    <Folder className="w-4 h-4" />
+                  </button>
+                </div>
+                <p className="text-xs text-gray-500 mt-1">Pfad zur Log-Datei (max. ~95 MB, wird danach rotiert).</p>
+              </div>
+              <button
+                onClick={() => (window.electronAPI as any).openLogFile()}
+                className="mt-3 px-4 py-2 bg-gray-100 hover:bg-gray-200 rounded-lg border transition-colors flex items-center text-sm font-medium text-gray-700"
+              >
+                <FileText className="w-4 h-4 mr-2" />
+                Log-Datei öffnen
+              </button>
             </div>
           </div>
         </div>
