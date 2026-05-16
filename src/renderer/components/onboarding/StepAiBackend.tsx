@@ -295,25 +295,25 @@ export const StepAiBackend: React.FC<StepAiBackendProps> = ({
                 </span>
               )}
               {ollamaStatus.state === 'ok' && ollamaStatus.result.connected && ollamaStatus.result.modelAvailable && (
-                <span className="flex items-center gap-1.5 text-sm" style={{ color: 'var(--state-success)' }}>
+                <span className="flex items-center gap-1.5 text-sm text-green-600">
                   <CheckCircle className="w-4 h-4" />
                   Verbunden — Modell verfügbar
                 </span>
               )}
               {ollamaStatus.state === 'ok' && ollamaStatus.result.connected && !ollamaStatus.result.modelAvailable && (
-                <span className="flex items-center gap-1.5 text-sm" style={{ color: 'var(--state-warning)' }}>
+                <span className="flex items-center gap-1.5 text-sm text-yellow-600">
                   <AlertCircle className="w-4 h-4" />
                   Verbunden — Modell nicht gefunden
                 </span>
               )}
               {ollamaStatus.state === 'ok' && !ollamaStatus.result.connected && (
-                <span className="flex items-center gap-1.5 text-sm" style={{ color: 'var(--state-error)' }}>
+                <span className="flex items-center gap-1.5 text-sm text-red-500">
                   <AlertCircle className="w-4 h-4" />
                   Ollama nicht erreichbar
                 </span>
               )}
               {ollamaStatus.state === 'error' && (
-                <span className="flex items-center gap-1.5 text-sm" style={{ color: 'var(--state-error)' }}>
+                <span className="flex items-center gap-1.5 text-sm text-red-500">
                   <AlertCircle className="w-4 h-4" />
                   {ollamaStatus.message}
                 </span>
@@ -407,8 +407,7 @@ export const StepAiBackend: React.FC<StepAiBackendProps> = ({
             {/* Done badge */}
             {downloadState.phase === 'done' && (
               <span
-                className="self-start flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-semibold"
-                style={{ color: 'var(--state-success)', background: 'color-mix(in srgb, var(--state-success) 15%, transparent)' }}
+                className="self-start flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-semibold text-green-800 bg-green-50"
               >
                 <CheckCircle className="w-4 h-4" />
                 Bereit
