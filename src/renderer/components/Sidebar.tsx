@@ -10,9 +10,11 @@ interface SidebarProps {
   onMoveToProcessing?: () => void;
   onOpenPdf?: () => void;
   onClose: () => void;
+  onReanalyzeStart?: (id: number) => void;
+  onReanalyzeEnd?: (id: number) => void;
 }
 
-export const Sidebar: React.FC<SidebarProps> = ({ document, isInbox, isArchive, onSave, onMoveToProcessing, onOpenPdf, onClose }) => {
+export const Sidebar: React.FC<SidebarProps> = ({ document, isInbox, isArchive, onSave, onMoveToProcessing, onOpenPdf, onClose, onReanalyzeStart, onReanalyzeEnd }) => {
   const [tags, setTags] = useState<string>('');
   const [sender, setSender] = useState<string>('');
   const [date, setDate] = useState<string>('');
@@ -47,6 +49,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ document, isInbox, isArchive, 
 
   const handleAIAnalyze = async () => {
     setLoading(true);
+    onReanalyzeStart?.(document.id);
     try {
       const result = await window.electronAPI.analyzeDocument(document.hash);
       if (result.success && result.data) {
@@ -64,6 +67,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ document, isInbox, isArchive, 
       alert('Fehler bei der Kommunikation mit der KI.');
     } finally {
       setLoading(false);
+      onReanalyzeEnd?.(document.id);
     }
   };
 

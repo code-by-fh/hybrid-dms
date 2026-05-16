@@ -31,6 +31,7 @@ function App() {
   const [pdfViewerDoc, setPdfViewerDoc] = useState<DocumentType | null>(null)
   const [crawlerRunning, setCrawlerRunning] = useState(false)
   const [ftsResults, setFtsResults] = useState<DocumentType[] | null>(null)
+  const [reanalyzingDocIds, setReanalyzingDocIds] = useState<Set<number>>(new Set())
 
   useEffect(() => {
     // Initial load
@@ -84,6 +85,14 @@ function App() {
     await window.electronAPI.moveToProcessing(hash);
     window.electronAPI.getDocuments().then(setDocuments);
     setSelectedDoc(null);
+  };
+
+  const handleReanalyzeStart = (id: number) => {
+    setReanalyzingDocIds(prev => new Set(prev).add(id));
+  };
+
+  const handleReanalyzeEnd = (id: number) => {
+    setReanalyzingDocIds(prev => { const next = new Set(prev); next.delete(id); return next; });
   };
 
   const handleRunCrawler = async () => {
@@ -214,11 +223,12 @@ function App() {
               selectedDoc={selectedDoc}
             />
           ) : (
-            <FileDashboard 
-              documents={filteredDocuments} 
-              selectedDoc={selectedDoc} 
+            <FileDashboard
+              documents={filteredDocuments}
+              selectedDoc={selectedDoc}
               onSelect={setSelectedDoc}
               isInbox={currentView === 'inbox'}
+              reanalyzingDocIds={reanalyzingDocIds}
             />
           )}
         </div>
@@ -240,6 +250,8 @@ function App() {
             onMoveToProcessing={() => handleMoveToProcessing(selectedDoc.hash)}
             onOpenPdf={() => setPdfViewerDoc(selectedDoc)}
             onClose={() => setSelectedDoc(null)}
+            onReanalyzeStart={handleReanalyzeStart}
+            onReanalyzeEnd={handleReanalyzeEnd}
           />
         </div>
       )}

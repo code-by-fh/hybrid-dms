@@ -1,15 +1,17 @@
 import React from 'react';
 import type { DocumentType } from '../../App';
-import { File, Clock, Tag as TagIcon, CheckCircle, AlertCircle, RefreshCw } from 'lucide-react';
+import { File, Tag as TagIcon, CheckCircle, AlertCircle, RefreshCw } from 'lucide-react';
+import { TimeDisplay } from './TimeDisplay';
 
 interface FileDashboardProps {
   documents: DocumentType[];
   selectedDoc: DocumentType | null;
   onSelect: (doc: DocumentType) => void;
   isInbox?: boolean;
+  reanalyzingDocIds?: Set<number>;
 }
 
-export const FileDashboard: React.FC<FileDashboardProps> = ({ documents, selectedDoc, onSelect }) => {
+export const FileDashboard: React.FC<FileDashboardProps> = ({ documents, selectedDoc, onSelect, reanalyzingDocIds }) => {
   return (
     <div className="bg-bg-surface rounded-lg shadow border border-border-base overflow-hidden transition-colors duration-300">
       <table className="w-full text-left border-collapse">
@@ -37,15 +39,15 @@ export const FileDashboard: React.FC<FileDashboardProps> = ({ documents, selecte
               const tagsArray = doc.tags ? JSON.parse(doc.tags) : [];
               const isNew = doc.status === 'new';
               const isOcrProcessing = doc.status === 'ocr_processing';
-              const isAiProcessing = doc.status === 'ai_processing';
+              const isAiProcessing = doc.status === 'ai_processing' || (reanalyzingDocIds?.has(doc.id) ?? false);
               const isError = doc.status === 'error';
               const isProcessing = isOcrProcessing || isAiProcessing;
 
               return (
-                <tr 
-                  key={doc.id} 
-                  onClick={() => onSelect(doc)}
-                  className={`border-b border-border-base last:border-b-0 cursor-pointer transition-colors ${isSelected ? 'bg-accent-primary/10 border-accent-primary' : 'hover:bg-bg-app'}`}
+                <tr
+                  key={doc.id}
+                  onClick={() => !isProcessing && onSelect(doc)}
+                  className={`border-b border-border-base last:border-b-0 transition-colors ${isProcessing ? 'opacity-60 cursor-not-allowed' : 'cursor-pointer'} ${isSelected && !isProcessing ? 'bg-accent-primary/10 border-accent-primary' : !isProcessing ? 'hover:bg-bg-app' : ''}`}
                 >
                   <td className="py-3 px-4">
                     <div className="flex items-center space-x-3">
@@ -95,10 +97,7 @@ export const FileDashboard: React.FC<FileDashboardProps> = ({ documents, selecte
                     </div>
                   </td>
                   <td className="py-3 px-4 text-text-subtle text-sm">
-                    <div className="flex items-center">
-                      <Clock className="w-4 h-4 mr-1.5" />
-                      {new Date(doc.indexed_at).toLocaleDateString()}
-                    </div>
+                    <TimeDisplay isoDate={doc.indexed_at} />
                   </td>
                 </tr>
               );
