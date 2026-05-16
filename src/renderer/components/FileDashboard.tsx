@@ -40,7 +40,7 @@ export const FileDashboard: React.FC<FileDashboardProps> = ({ documents, selecte
               const isNew = doc.status === 'new';
               const isOcrProcessing = doc.status === 'ocr_processing';
               const isAiProcessing = doc.status === 'ai_processing' || (reanalyzingDocIds?.has(doc.id) ?? false);
-              const isError = doc.status === 'error';
+              const isError = doc.status === 'error' || doc.status === 'ai_pending';
               const isProcessing = isOcrProcessing || isAiProcessing;
 
               return (

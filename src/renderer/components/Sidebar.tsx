@@ -26,6 +26,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ document, isInbox, isArchive, 
   const isAiPending = document.status === 'ai_pending';
   const isError = document.status === 'error';
   const processingText = document.status === 'ocr_processing' ? 'OCR Texterkennung läuft…' : 'KI Analyse läuft…';
+  const aiErrorMsg = (() => { try { return JSON.parse(document.metadata)?.aiError ?? null; } catch { return null; } })();
 
   useEffect(() => {
     try {
@@ -159,7 +160,9 @@ export const Sidebar: React.FC<SidebarProps> = ({ document, isInbox, isArchive, 
             <AlertCircle className="w-5 h-5 mr-3 text-red-600 shrink-0 mt-0.5" />
             <div>
               <p className="font-bold">Verarbeitung fehlgeschlagen</p>
-              <p className="text-xs mt-0.5 opacity-70">OCR oder KI-Analyse konnte nicht abgeschlossen werden.</p>
+              <p className="text-xs mt-0.5 opacity-70">
+                {aiErrorMsg ?? 'OCR oder KI-Analyse konnte nicht abgeschlossen werden.'}
+              </p>
             </div>
           </div>
         )}

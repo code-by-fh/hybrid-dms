@@ -117,7 +117,7 @@ async function processInboxFile(uuid: string, hash: string, normalizedPath: stri
   }
 
   if (!aiResult) {
-    updateDocumentMetadata(hash, '[]', JSON.stringify({ needsOcr: false, aiPending: true }), 'ai_pending');
+    updateDocumentMetadata(hash, '[]', JSON.stringify({ needsOcr: false, aiError: 'KI nicht verfügbar – Ollama oder das konfigurierte Modell ist nicht erreichbar.' }), 'error');
     if (onDbChange) onDbChange();
     return;
   }
@@ -417,14 +417,15 @@ export async function processPendingDocuments(onDbChange?: () => void) {
                         console.error(`[Sync] Move after AI retry failed`, moveErr);
                     }
                 } else {
-                    // Still offline — reset to ai_pending so we retry next cycle
-                    console.warn(`[Sync] AI still unavailable for ${doc.hash}, will retry later`);
-                    updateDocumentStatus(doc.hash, 'ai_pending');
+                    console.warn(`[Sync] AI still unavailable for ${doc.hash}`);
+                    const currentMeta = doc.metadata ? JSON.parse(doc.metadata) : {};
+                    updateDocumentMetadata(doc.hash, doc.tags, JSON.stringify({ ...currentMeta, aiError: 'KI nicht verfügbar – Ollama oder das konfigurierte Modell ist nicht erreichbar.' }), 'error');
                 }
                 if (onDbChange) onDbChange();
             } catch (e) {
                 console.error(`[Sync] AI retry failed for ${doc.hash}`, e);
-                updateDocumentStatus(doc.hash, 'ai_pending');
+                const currentMeta = doc.metadata ? JSON.parse(doc.metadata) : {};
+                updateDocumentMetadata(doc.hash, doc.tags, JSON.stringify({ ...currentMeta, aiError: 'KI nicht verfügbar – Ollama oder das konfigurierte Modell ist nicht erreichbar.' }), 'error');
                 if (onDbChange) onDbChange();
             }
             continue;
