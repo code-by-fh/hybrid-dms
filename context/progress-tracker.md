@@ -19,6 +19,8 @@ Context file setup and documentation. No active feature work.
 - Tesseract.js OCR (German + English) with sandwich PDF creation
 - Ollama AI metadata extraction (sender, date, docType, tags, suggestedFilename,
   archivePath)
+- aiService refactored to support three backends: ollama, gguf, managed (node-llama-cpp)
+- `checkAiBackend()` exported for connectivity/file-existence checks per backend
 - Filename sanitization (ASCII-only, `YYMMDD_DocType_Sender` format)
 - Automatic rename and move to Sortieren after AI analysis
 - pdf-lib XMP metadata write (UUID to Subject, tags to Keywords)
@@ -63,7 +65,9 @@ Context file setup and documentation. No active feature work.
   metadata readers).
 - **Sandwich PDF (not replace)**: OCR output overlays the original scan so visual
   fidelity is preserved while making the document text-searchable.
-- **Ollama-only for AI**: No cloud LLM — keeps processing fully local and offline.
+- **Multi-backend AI**: aiService dispatches to `ollama` (HTTP), `gguf` (direct file path
+  via node-llama-cpp), or `managed` (bundled model in userData/dms-data/models/) based on
+  the `AI_BACKEND` setting. All backends share the same prompt and sanitization logic.
 - **Separate frameless search window**: Allows global hotkey access from any application
   without disrupting the main window state.
 - **Synchronous better-sqlite3**: Chosen over async alternatives because main-process
