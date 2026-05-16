@@ -2,6 +2,7 @@ import { createWorker } from 'tesseract.js';
 import path from 'path';
 import fs from 'fs/promises';
 import { createCanvas, ImageData } from 'canvas';
+import { getSetting } from '../db/index.js';
 
 // pdfjs-dist v5 NodeCanvasFactory hard-requires @napi-rs/canvas.
 // We use the `canvas` package instead, so we provide a custom factory
@@ -39,7 +40,7 @@ export async function performOCR(filePath: string): Promise<string> {
 }
 
 async function ocrImageFile(filePath: string): Promise<string> {
-  const worker = await createWorker('deu+eng');
+  const worker = await createWorker(getSetting('OCR_LANGUAGES', 'deu+eng'));
   try {
     const { data } = await worker.recognize(filePath);
     return data.text;
@@ -49,7 +50,7 @@ async function ocrImageFile(filePath: string): Promise<string> {
 }
 
 async function runTesseract(input: Buffer): Promise<{ text: string; words: WordBox[] }> {
-  const worker = await createWorker('deu+eng');
+  const worker = await createWorker(getSetting('OCR_LANGUAGES', 'deu+eng'));
   try {
     // Tesseract.js v7: data.words is not returned by default — must request tsv output
     const { data } = await worker.recognize(input, {}, { tsv: true });
