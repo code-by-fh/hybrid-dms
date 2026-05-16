@@ -1,11 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { X, Folder, Save, FileText, CheckCircle, AlertCircle, Loader } from 'lucide-react';
+import { X, Folder, Save, FileText, CheckCircle, AlertCircle, Loader, Wand2 } from 'lucide-react';
 
 interface SettingsModalProps {
   onClose: () => void;
+  onOpenOnboarding?: () => void;
 }
 
-export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
+export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose, onOpenOnboarding }) => {
   const [inboxPath, setInboxPath] = useState('');
   const [processingPath, setProcessingPath] = useState('');
   const [archivePath, setArchivePath] = useState('');
@@ -245,22 +246,31 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
           </div>
         </div>
 
-        <div className="p-6 border-t bg-gray-50 flex justify-end space-x-4">
+        <div className="p-6 border-t bg-gray-50 flex items-center justify-between">
           <button
-            onClick={onClose}
-            className="px-6 py-2 border rounded-lg hover:bg-gray-100 transition-colors font-medium text-gray-600"
+            onClick={() => { onOpenOnboarding?.(); onClose(); }}
+            className="px-4 py-2 border rounded-lg hover:bg-gray-100 transition-colors text-sm font-medium text-gray-600 flex items-center gap-2"
           >
-            {ollamaCheck || checking ? 'Schließen' : 'Abbrechen'}
+            <Wand2 className="w-4 h-4" />
+            Setup-Assistent starten
           </button>
-          {!ollamaCheck && !checking && (
+          <div className="flex space-x-4">
             <button
-              onClick={handleSave}
-              className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium flex items-center shadow-md"
+              onClick={onClose}
+              className="px-6 py-2 border rounded-lg hover:bg-gray-100 transition-colors font-medium text-gray-600"
             >
-              <Save className="w-4 h-4 mr-2" />
-              Einstellungen speichern
+              {ollamaCheck || checking ? 'Schließen' : 'Abbrechen'}
             </button>
-          )}
+            {!ollamaCheck && !checking && (
+              <button
+                onClick={handleSave}
+                className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium flex items-center shadow-md"
+              >
+                <Save className="w-4 h-4 mr-2" />
+                Einstellungen speichern
+              </button>
+            )}
+          </div>
         </div>
       </div>
     </div>

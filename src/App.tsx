@@ -7,6 +7,7 @@ import type { ViewType } from './renderer/components/NavSidebar'
 import { ArchiveTree } from './renderer/components/ArchiveTree'
 import { Search, Filter, RefreshCw, Folder } from 'lucide-react'
 import { PdfViewerModal } from './renderer/components/PdfViewerModal'
+import { OnboardingModal } from './renderer/components/OnboardingModal'
 
 export interface DocumentType {
   id: number;
@@ -32,12 +33,16 @@ function App() {
   const [crawlerRunning, setCrawlerRunning] = useState(false)
   const [ftsResults, setFtsResults] = useState<DocumentType[] | null>(null)
   const [reanalyzingDocIds, setReanalyzingDocIds] = useState<Set<number>>(new Set())
+  const [isOnboardingOpen, setIsOnboardingOpen] = useState(false)
 
   useEffect(() => {
     // Initial load
     if (window.electronAPI) {
       window.electronAPI.getDocuments().then(docs => { setDocuments(docs); documentsRef.current = docs; })
-      window.electronAPI.getSettings().then(setSettings)
+      window.electronAPI.getSettings().then(s => {
+        setSettings(s);
+        if (!s?.INBOX_PATH) setIsOnboardingOpen(true);
+      })
       
       // Listen for document changes
       window.electronAPI.onDocumentsChanged(() => {
@@ -237,7 +242,19 @@ function App() {
 
       {/* Settings Modal */}
       {isSettingsOpen && (
-        <SettingsModal onClose={() => setIsSettingsOpen(false)} />
+        <SettingsModal onClose={() => setIsSettingsOpen(false)} onOpenOnboarding={() => setIsOnboardingOpen(true)} />
+      )}
+
+      {/* Onboarding Modal */}
+      {isOnboardingOpen && settings && (
+        <OnboardingModal
+          initialSettings={settings}
+          isFirstRun={!settings?.INBOX_PATH}
+          onClose={() => {
+            setIsOnboardingOpen(false);
+            window.electronAPI.getSettings().then(setSettings);
+          }}
+        />
       )}
 
       {/* Sidebar for Metadata */}
