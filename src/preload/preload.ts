@@ -30,5 +30,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.on('open-document-by-uuid', (_event, uuid) => callback(uuid));
   },
   hideSearchWindow: () => ipcRenderer.send('hide-search-window'),
+  getLogPath: () => ipcRenderer.invoke('get-log-path'),
+  setLogPath: (p: string) => ipcRenderer.invoke('set-log-path', p),
+  openLogFile: () => ipcRenderer.invoke('open-log-file'),
 });
 
