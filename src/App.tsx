@@ -52,7 +52,7 @@ function App() {
         window.electronAPI.checkOllamaStatus().then(setOllamaStatus);
       };
       checkOllama();
-      const interval = setInterval(checkOllama, 10000); // every 10s
+      const interval = setInterval(checkOllama, 30000); // every 30s
 
       // Crawler status
       ;(window.electronAPI as any).getCrawlerStatus().then((s: { running: boolean }) => setCrawlerRunning(s.running));

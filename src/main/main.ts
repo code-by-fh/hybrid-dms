@@ -6,7 +6,7 @@ import { initDb, getAllDocuments, getSetting, setSetting, getDocumentByHash, upd
 import { writeXmpMetadata } from './services/xmpService.js';
 import { startWatcher, runUuidCrawler, isCrawlerRunning, getConfig, processPendingDocuments } from './services/syncEngine.js';
 import { initLogger, getLogPath, setLogPath, log } from './services/logger.js';
-import { checkOllamaStatus, analyzeDocumentWithAI } from './services/aiService.js';
+import { checkOllamaStatus, checkOllamaConfig, analyzeDocumentWithAI } from './services/aiService.js';
 import { performOCR } from './services/ocrService.js';
 import { PDFParse } from 'pdf-parse';
 import { createCanvas, Image } from 'canvas';
@@ -279,6 +279,10 @@ ipcMain.handle('update-settings', async (event, newSettings) => {
 
 ipcMain.handle('check-ollama-status', async () => {
     return checkOllamaStatus();
+});
+
+ipcMain.handle('check-ollama-config', async (_event, { url, model }: { url: string; model: string }) => {
+    return checkOllamaConfig(url, model);
 });
 
 ipcMain.handle('perform-ocr', async (event, hash) => {

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { X, Folder, Save, Trash2, FileText } from 'lucide-react';
+import { X, Folder, Save, Trash2, FileText, CheckCircle, AlertCircle, Loader } from 'lucide-react';
 
 interface SettingsModalProps {
   onClose: () => void;
@@ -14,6 +14,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
   const [ollamaModel, setOllamaModel] = useState('');
   const [logPath, setLogPath] = useState('');
   const [loading, setLoading] = useState(true);
+  const [ollamaCheck, setOllamaCheck] = useState<{ connected: boolean; modelAvailable: boolean; availableModels: string[] } | null>(null);
+  const [checking, setChecking] = useState(false);
 
   useEffect(() => {
     window.electronAPI.getSettings().then(settings => {
@@ -47,7 +49,11 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
     if (logPath) {
       await (window.electronAPI as any).setLogPath(logPath);
     }
-    onClose();
+    setChecking(true);
+    setOllamaCheck(null);
+    const result = await (window.electronAPI as any).checkOllamaConfig(ollamaUrl, ollamaModel);
+    setOllamaCheck(result);
+    setChecking(false);
   };
 
   if (loading) return null;
@@ -164,6 +170,44 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
                 </div>
               </div>
               <p className="text-xs text-gray-500 mt-2">Die KI wird zur automatischen Dokumentenanalyse und Verschlagwortung genutzt.</p>
+
+              {checking && (
+                <div className="mt-3 flex items-center text-sm text-gray-500 bg-gray-50 border rounded-lg px-3 py-2">
+                  <Loader className="w-4 h-4 mr-2 animate-spin text-blue-500 shrink-0" />
+                  Verbindung wird geprüft…
+                </div>
+              )}
+              {!checking && ollamaCheck && (
+                <div className={`mt-3 px-3 py-2 rounded-lg border text-sm flex items-start ${
+                  ollamaCheck.connected && ollamaCheck.modelAvailable
+                    ? 'bg-green-50 border-green-200 text-green-800'
+                    : ollamaCheck.connected
+                    ? 'bg-yellow-50 border-yellow-200 text-yellow-800'
+                    : 'bg-red-50 border-red-200 text-red-800'
+                }`}>
+                  {ollamaCheck.connected && ollamaCheck.modelAvailable ? (
+                    <CheckCircle className="w-4 h-4 mr-2 shrink-0 mt-0.5 text-green-600" />
+                  ) : (
+                    <AlertCircle className="w-4 h-4 mr-2 shrink-0 mt-0.5" />
+                  )}
+                  <div>
+                    {!ollamaCheck.connected && (
+                      <p className="font-semibold">Ollama nicht erreichbar unter <span className="font-mono">{ollamaUrl}</span></p>
+                    )}
+                    {ollamaCheck.connected && !ollamaCheck.modelAvailable && (
+                      <>
+                        <p className="font-semibold">Ollama erreichbar, Modell <span className="font-mono">'{ollamaModel}'</span> nicht gefunden</p>
+                        {ollamaCheck.availableModels.length > 0 && (
+                          <p className="text-xs mt-0.5 opacity-80">Verfügbare Modelle: {ollamaCheck.availableModels.join(', ')}</p>
+                        )}
+                      </>
+                    )}
+                    {ollamaCheck.connected && ollamaCheck.modelAvailable && (
+                      <p className="font-semibold">Ollama verbunden, Modell <span className="font-mono">'{ollamaModel}'</span> verfügbar</p>
+                    )}
+                  </div>
+                </div>
+              )}
             </div>
 
             <div className="border-t pt-4 mt-4">
@@ -202,19 +246,21 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
         </div>
 
         <div className="p-6 border-t bg-gray-50 flex justify-end space-x-4">
-          <button 
+          <button
             onClick={onClose}
             className="px-6 py-2 border rounded-lg hover:bg-gray-100 transition-colors font-medium text-gray-600"
           >
-            Abbrechen
+            {ollamaCheck || checking ? 'Schließen' : 'Abbrechen'}
           </button>
-          <button 
-            onClick={handleSave}
-            className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium flex items-center shadow-md"
-          >
-            <Save className="w-4 h-4 mr-2" />
-            Einstellungen speichern
-          </button>
+          {!ollamaCheck && !checking && (
+            <button
+              onClick={handleSave}
+              className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium flex items-center shadow-md"
+            >
+              <Save className="w-4 h-4 mr-2" />
+              Einstellungen speichern
+            </button>
+          )}
         </div>
       </div>
     </div>

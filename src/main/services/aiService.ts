@@ -10,6 +10,23 @@ export async function checkOllamaStatus() {
   }
 }
 
+export async function checkOllamaConfig(url: string, model: string): Promise<{ connected: boolean; modelAvailable: boolean; availableModels: string[] }> {
+  try {
+    const rootResp = await fetch(url, { signal: AbortSignal.timeout(5000) });
+    if (!rootResp.ok) return { connected: false, modelAvailable: false, availableModels: [] };
+
+    const tagsResp = await fetch(`${url}/api/tags`, { signal: AbortSignal.timeout(5000) });
+    if (!tagsResp.ok) return { connected: true, modelAvailable: false, availableModels: [] };
+
+    const data = await tagsResp.json();
+    const availableModels: string[] = (data.models ?? []).map((m: any) => String(m.name));
+    const modelAvailable = availableModels.some(m => m === model || m.startsWith(model + ':'));
+    return { connected: true, modelAvailable, availableModels };
+  } catch {
+    return { connected: false, modelAvailable: false, availableModels: [] };
+  }
+}
+
 export async function analyzeDocumentWithAI(text: string) {
   const config = getConfig();
 
