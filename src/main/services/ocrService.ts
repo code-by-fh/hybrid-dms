@@ -157,7 +157,7 @@ async function processPdf(filePath: string): Promise<string> {
     // Render the page to a PNG
     const factory = new CustomCanvasFactory();
     const { canvas, context } = factory.create(widthPx, heightPx);
-    await pdfjsPage.render({ canvasContext: context, viewport }).promise;
+    await pdfjsPage.render({ canvasContext: context as unknown as CanvasRenderingContext2D, canvas: canvas as unknown as HTMLCanvasElement, viewport }).promise;
     const pngBuffer: Buffer = (canvas as any).toBuffer('image/png');
 
     // OCR the rendered image

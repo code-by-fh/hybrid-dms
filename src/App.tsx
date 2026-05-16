@@ -100,7 +100,7 @@ function App() {
     await (window.electronAPI as any).runCrawler();
   };
 
-  const handleSaveAndMove = async (tags: string, metadata: any) => {
+  const handleSaveAndMove = async (tags: string[], metadata: any) => {
     if (!selectedDoc) return;
     
     await window.electronAPI.saveAndMove({

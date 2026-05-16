@@ -23,7 +23,7 @@ export async function writeXmpMetadata(
   filePath: string,
   uuid: string,
   tags: string[],
-  textExcerpt: string = ''  // kept for API compatibility but not written to PDF
+  _textExcerpt: string = ''  // kept for API compatibility but not written to PDF
 ): Promise<void> {
   if (!uuid) throw new Error('uuid is required');
   const bytes = await fs.readFile(filePath);

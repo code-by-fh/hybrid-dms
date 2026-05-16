@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { X, Folder, Save, Trash2, FileText, CheckCircle, AlertCircle, Loader } from 'lucide-react';
+import { X, Folder, Save, FileText, CheckCircle, AlertCircle, Loader } from 'lucide-react';
 
 interface SettingsModalProps {
   onClose: () => void;

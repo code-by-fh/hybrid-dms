@@ -1,5 +1,7 @@
 /// <reference types="vite/client" />
 
+export {};
+
 interface ElectronAPI {
   getDocuments: () => Promise<any[]>;
   saveAndMove: (data: any) => Promise<any>;

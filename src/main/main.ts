@@ -1,8 +1,7 @@
 import { app, BrowserWindow, ipcMain, dialog, Tray, Menu, globalShortcut, nativeImage } from 'electron';
 import path from 'path';
 import fs from 'fs/promises';
-import { fileURLToPath } from 'url';
-import { initDb, getAllDocuments, getSetting, setSetting, getDocumentByHash, updateDocumentMetadata, updateDocumentPath, updateDocumentStatus, searchDocuments } from './db/index.js';
+import { initDb, getAllDocuments, setSetting, getDocumentByHash, updateDocumentMetadata, updateDocumentPath, updateDocumentStatus, searchDocuments } from './db/index.js';
 import { writeXmpMetadata } from './services/xmpService.js';
 import { startWatcher, runUuidCrawler, isCrawlerRunning, getConfig, processPendingDocuments } from './services/syncEngine.js';
 import { initLogger, getLogPath, setLogPath, log } from './services/logger.js';
@@ -173,7 +172,7 @@ ipcMain.handle('get-documents', async () => {
     return getAllDocuments();
 });
 
-ipcMain.handle('save-and-move', async (event, { hash, tags, metadata }) => {
+ipcMain.handle('save-and-move', async (_event, { hash, tags, metadata }) => {
     try {
         const doc = getDocumentByHash(hash);
         if (!doc) throw new Error("Document not found");
@@ -228,7 +227,7 @@ ipcMain.handle('save-and-move', async (event, { hash, tags, metadata }) => {
     }
 });
 
-ipcMain.handle('move-to-processing', async (event, hash) => {
+ipcMain.handle('move-to-processing', async (_event, hash) => {
     try {
         const doc = getDocumentByHash(hash);
         if (!doc) throw new Error("Document not found");
@@ -262,7 +261,7 @@ ipcMain.handle('get-settings', async () => {
     return getConfig();
 });
 
-ipcMain.handle('update-settings', async (event, newSettings) => {
+ipcMain.handle('update-settings', async (_event, newSettings) => {
     Object.entries(newSettings).forEach(([key, value]) => {
         setSetting(key, value as string);
     });
@@ -285,7 +284,7 @@ ipcMain.handle('check-ollama-config', async (_event, { url, model }: { url: stri
     return checkOllamaConfig(url, model);
 });
 
-ipcMain.handle('perform-ocr', async (event, hash) => {
+ipcMain.handle('perform-ocr', async (_event, hash) => {
   try {
     const doc = getDocumentByHash(hash);
     if (!doc) throw new Error("Document not found");
@@ -308,7 +307,7 @@ ipcMain.handle('perform-ocr', async (event, hash) => {
   }
 });
 
-ipcMain.handle('analyze-document', async (event, hash) => {
+ipcMain.handle('analyze-document', async (_event, hash) => {
     try {
         const doc = getDocumentByHash(hash);
         if (!doc) throw new Error("Document not found");
@@ -336,7 +335,7 @@ ipcMain.handle('analyze-document', async (event, hash) => {
     }
 });
 
-ipcMain.handle('retry-processing', async (event, hash) => {
+ipcMain.handle('retry-processing', async (_event, hash) => {
     try {
         const doc = getDocumentByHash(hash);
         if (!doc) throw new Error('Document not found');
@@ -351,7 +350,7 @@ ipcMain.handle('retry-processing', async (event, hash) => {
     }
 });
 
-ipcMain.handle('rename-file', async (event, { hash, newName }: { hash: string; newName: string }) => {
+ipcMain.handle('rename-file', async (_event, { hash, newName }: { hash: string; newName: string }) => {
     try {
         const doc = getDocumentByHash(hash);
         if (!doc) throw new Error('Document not found');
@@ -410,7 +409,7 @@ ipcMain.handle('search-documents', async (_event, query: string) => {
   return searchDocuments(safeQuery);
 });
 
-ipcMain.handle('move-file', async (event, { hash, targetDir }: { hash: string; targetDir: string }) => {
+ipcMain.handle('move-file', async (_event, { hash, targetDir }: { hash: string; targetDir: string }) => {
     try {
         const doc = getDocumentByHash(hash);
         if (!doc) throw new Error('Document not found');
