@@ -6,8 +6,32 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
+    "dist": "npm run build && electron-builder",
     "lint": "eslint .",
     "preview": "vite preview"
+  },
+  "build": {
+    "appId": "com.doublelayer.documents-dms",
+    "productName": "Documents DMS",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**/*",
+      "dist-electron/**/*",
+      "node_modules/**/*",
+      "package.json"
+    ],
+    "asarUnpack": [
+      "node_modules/better-sqlite3/**/*",
+      "node_modules/canvas/**/*",
+      "node_modules/tesseract.js/**/*",
+      "node_modules/pdfjs-dist/**/*"
+    ],
+    "win": {
+      "target": "portable",
+      "arch": ["x64"]
+    }
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",
