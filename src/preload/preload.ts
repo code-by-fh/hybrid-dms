@@ -34,5 +34,19 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getLogPath: () => ipcRenderer.invoke('get-log-path'),
   setLogPath: (p: string) => ipcRenderer.invoke('set-log-path', p),
   openLogFile: () => ipcRenderer.invoke('open-log-file'),
+  openFileDialog: (options?: { filters?: { name: string; extensions: string[] }[] }) =>
+    ipcRenderer.invoke('open-file-dialog', options),
+  checkAiBackend: () => ipcRenderer.invoke('check-ai-backend'),
+  downloadModel: (modelKey: string) => ipcRenderer.invoke('download-model', modelKey),
+  onDownloadProgress: (callback: (progress: {
+    modelKey: string;
+    downloadedBytes: number;
+    totalBytes: number;
+    speedBytesPerSec: number;
+    done?: boolean;
+  }) => void) => {
+    ipcRenderer.removeAllListeners('download-progress');
+    ipcRenderer.on('download-progress', (_event, progress) => callback(progress));
+  },
 });
 

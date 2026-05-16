@@ -5,7 +5,7 @@ import { initDb, getAllDocuments, setSetting, getDocumentByHash, updateDocumentM
 import { writeXmpMetadata } from './services/xmpService.js';
 import { startWatcher, runUuidCrawler, isCrawlerRunning, getConfig, processPendingDocuments } from './services/syncEngine.js';
 import { initLogger, getLogPath, setLogPath, log } from './services/logger.js';
-import { checkOllamaStatus, checkOllamaConfig, analyzeDocumentWithAI } from './services/aiService.js';
+import { checkOllamaStatus, checkOllamaConfig, analyzeDocumentWithAI, checkAiBackend } from './services/aiService.js';
 import { performOCR } from './services/ocrService.js';
 import { PDFParse } from 'pdf-parse';
 import { createCanvas, Image } from 'canvas';
@@ -18,6 +18,12 @@ if (typeof global !== 'undefined') {
     (global as any).HTMLCanvasElement = createCanvas(1, 1).constructor;
   }
 }
+
+const MODEL_URLS: Record<string, string> = {
+  'gemma-4-4b-q4': 'https://huggingface.co/bartowski/google_gemma-4-4b-it-GGUF/resolve/main/google_gemma-4-4b-it-Q4_K_M.gguf',
+  'gemma-4-12b-q4': 'https://huggingface.co/bartowski/google_gemma-4-12b-it-GGUF/resolve/main/google_gemma-4-12b-it-Q4_K_M.gguf',
+  'llama-3.2-3b-q4': 'https://huggingface.co/bartowski/Llama-3.2-3B-Instruct-GGUF/resolve/main/Llama-3.2-3B-Instruct-Q4_K_M.gguf',
+};
 
 let mainWindow: BrowserWindow | null = null;
 let tray: Tray | null = null;
@@ -441,6 +447,86 @@ ipcMain.handle('open-log-file', async () => {
   if (!filePath) return { success: false, error: 'No log path configured' };
   const result = await shell.openPath(filePath);
   return { success: result === '' };
+});
+
+ipcMain.handle('open-file-dialog', async (_event, options?: { filters?: { name: string; extensions: string[] }[] }) => {
+  if (!mainWindow) return null;
+  const result = await dialog.showOpenDialog(mainWindow, {
+    properties: ['openFile'],
+    filters: options?.filters ?? [{ name: 'GGUF Models', extensions: ['gguf'] }],
+  });
+  if (result.canceled || result.filePaths.length === 0) return null;
+  return result.filePaths[0];
+});
+
+ipcMain.handle('check-ai-backend', async () => {
+  return checkAiBackend();
+});
+
+ipcMain.handle('download-model', async (_event, modelKey: string) => {
+  const url = MODEL_URLS[modelKey];
+  if (!url) return { success: false, error: 'Unknown model key' };
+
+  const modelsDir = path.join(app.getPath('userData'), 'dms-data', 'models');
+  await fs.mkdir(modelsDir, { recursive: true });
+
+  const fileName = url.split('/').pop()!;
+  const destPath = path.join(modelsDir, fileName);
+
+  try {
+    const response = await fetch(url);
+    if (!response.ok || !response.body) throw new Error(`HTTP ${response.status}`);
+
+    const totalBytes = parseInt(response.headers.get('content-length') ?? '0', 10);
+    let downloadedBytes = 0;
+    let lastSpeedUpdate = Date.now();
+    let bytesAtLastUpdate = 0;
+
+    const fileHandle = await fs.open(destPath, 'w');
+    const writer = fileHandle.createWriteStream();
+
+    const reader = response.body.getReader();
+    try {
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        writer.write(Buffer.from(value));
+        downloadedBytes += value.length;
+
+        const now = Date.now();
+        if (now - lastSpeedUpdate >= 500) {
+          const elapsed = (now - lastSpeedUpdate) / 1000;
+          const speed = (downloadedBytes - bytesAtLastUpdate) / elapsed;
+          lastSpeedUpdate = now;
+          bytesAtLastUpdate = downloadedBytes;
+          mainWindow?.webContents.send('download-progress', {
+            modelKey,
+            downloadedBytes,
+            totalBytes,
+            speedBytesPerSec: speed,
+          });
+        }
+      }
+    } finally {
+      reader.releaseLock();
+      writer.end();
+      await fileHandle.close();
+    }
+
+    // Final progress event
+    mainWindow?.webContents.send('download-progress', {
+      modelKey,
+      downloadedBytes,
+      totalBytes,
+      speedBytesPerSec: 0,
+      done: true,
+    });
+
+    return { success: true, filePath: destPath };
+  } catch (err) {
+    log('error', `[download-model] Failed: ${(err as Error).message}`);
+    return { success: false, error: (err as Error).message };
+  }
 });
 
 ipcMain.on('open-document-from-tray', (_event, uuid: string) => {
