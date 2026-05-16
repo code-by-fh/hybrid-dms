@@ -34,16 +34,25 @@
       "node_modules/better-sqlite3/**/*",
       "node_modules/canvas/**/*",
       "node_modules/tesseract.js/**/*",
-      "node_modules/pdfjs-dist/**/*"
+      "node_modules/pdfjs-dist/**/*",
+      "node_modules/node-llama-cpp/**/*"
     ],
     "win": {
-      "target": [{ "target": "portable", "arch": ["x64"] }]
+      "target": [
+        {
+          "target": "portable",
+          "arch": [
+            "x64"
+          ]
+        }
+      ]
     }
   },
   "dependencies": {
     "better-sqlite3": "^12.10.0",
     "canvas": "^3.2.3",
     "chokidar": "^3.6.0",
+    "node-llama-cpp": "^3.18.1",
     "pdf-lib": "^1.17.1",
     "pdf-parse": "^2.4.5",
     "pdfjs-dist": "5.4.296",
