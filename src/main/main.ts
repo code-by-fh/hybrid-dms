@@ -377,11 +377,16 @@ ipcMain.handle('rename-file', async (event, { hash, newName }: { hash: string; n
 });
 
 ipcMain.handle('run-crawler', async () => {
-  if (isCrawlerRunning()) return { running: true };
-  runUuidCrawler(
+  if (isCrawlerRunning()) {
+    log('info', '[Crawler] Manual scan requested but already running');
+    return { running: true };
+  }
+  log('info', '[Crawler] Manual archive scan started');
+  await runUuidCrawler(
     (status) => { if (mainWindow) mainWindow.webContents.send('crawler-status-changed', status); },
     () => { if (mainWindow) mainWindow.webContents.send('documents-changed'); }
   );
+  log('info', '[Crawler] Manual archive scan completed');
   return { started: true };
 });
 

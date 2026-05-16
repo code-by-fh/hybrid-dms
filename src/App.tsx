@@ -96,6 +96,7 @@ function App() {
   };
 
   const handleRunCrawler = async () => {
+    setCrawlerRunning(true);
     await (window.electronAPI as any).runCrawler();
   };
 

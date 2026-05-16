@@ -78,8 +78,11 @@ export const NavSidebar: React.FC<NavSidebarProps> = ({ currentView, onViewChang
           disabled={crawlerRunning}
           className="w-full flex items-center px-4 py-3 rounded-lg hover:bg-bg-app text-text-subtle hover:text-text-main transition-all group disabled:opacity-40 disabled:cursor-not-allowed"
         >
-          <RefreshCw className={`w-5 h-5 mr-3 ${crawlerRunning ? 'animate-spin text-accent-primary' : 'group-hover:text-accent-primary'}`} />
-          <span className="font-medium">{crawlerRunning ? 'Läuft…' : 'Archiv scannen'}</span>
+          <RefreshCw className={`w-5 h-5 mr-3 flex-shrink-0 ${crawlerRunning ? 'animate-spin text-accent-primary' : 'group-hover:text-accent-primary'}`} />
+          <div className="flex flex-col items-start">
+            <span className="font-medium leading-tight">{crawlerRunning ? 'Läuft…' : 'Archiv scannen'}</span>
+            <span className="text-[10px] leading-tight mt-0.5 opacity-60">Archiv auf neue Dateien prüfen</span>
+          </div>
         </button>
 
         <button
