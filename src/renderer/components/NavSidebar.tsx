@@ -70,16 +70,16 @@ export const NavSidebar: React.FC<NavSidebarProps> = ({ currentView, onViewChang
           ) : (
             <Sun className="w-5 h-5 mr-3 group-hover:text-yellow-400 transition-colors" />
           )}
-          <span className="font-medium">{theme === 'light' ? 'Dark Mode' : 'Light Mode'}</span>
+          <span className="font-medium">Design wechseln</span>
         </button>
 
         <button
           onClick={onRunCrawler}
           disabled={crawlerRunning}
-          title={crawlerRunning ? 'Archiv wird gescannt…' : 'Archiv scannen'}
-          className="p-2 rounded-lg transition-colors text-text-subtle hover:text-accent-primary hover:bg-bg-surface disabled:opacity-40 disabled:cursor-not-allowed"
+          className="w-full flex items-center px-4 py-3 rounded-lg hover:bg-bg-app text-text-subtle hover:text-text-main transition-all group disabled:opacity-40 disabled:cursor-not-allowed"
         >
-          <RefreshCw className={`w-5 h-5 ${crawlerRunning ? 'animate-spin' : ''}`} />
+          <RefreshCw className={`w-5 h-5 mr-3 ${crawlerRunning ? 'animate-spin text-accent-primary' : 'group-hover:text-accent-primary'}`} />
+          <span className="font-medium">{crawlerRunning ? 'Läuft…' : 'Archiv scannen'}</span>
         </button>
 
         <button
