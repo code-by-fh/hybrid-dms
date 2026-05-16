@@ -2,11 +2,11 @@
 
 ## Current Phase
 
-Complete (v0.0.0 — packaged and released as portable Windows .exe)
+Active development — feature/onboarding-wizard branch
 
 ## Current Goal
 
-Context file setup and documentation. No active feature work.
+Onboarding wizard implemented. Pending: merge to main, package + test as .exe.
 
 ## Completed
 
@@ -42,7 +42,7 @@ Context file setup and documentation. No active feature work.
 
 ## In Progress
 
-- None.
+- None (onboarding-wizard branch complete, not yet merged).
 
 ## Next Up
 
@@ -54,10 +54,17 @@ Context file setup and documentation. No active feature work.
 - Should the AI-suggested archivePath be validated against the existing folder tree before
   presenting it to the user?
 - Is there a plan to add import/backup of the SQLite database for portability?
-- Should the OCR language set (deu+eng) be configurable in Settings?
+- OCR language set is now configurable via onboarding + OCR_LANGUAGES setting. ✅ Resolved.
 
 ## Architecture Decisions
 
+- **Multi-backend AI (2026-05-16)**: aiService.ts now dispatches to Ollama (HTTP), local GGUF
+  (node-llama-cpp), or managed download (node-llama-cpp) based on AI_BACKEND setting.
+  Legacy OLLAMA_URL/OLLAMA_MODEL keys kept for backward compat. New keys: AI_BACKEND,
+  AI_URL, AI_MODEL_NAME, GGUF_MODEL_PATH, OCR_LANGUAGES.
+- **Onboarding wizard (2026-05-16)**: 3-step modal (KI-Setup, Ordner, Sonstiges) shown on
+  first run (INBOX_PATH empty) and accessible via "Setup-Assistent" button in Settings.
+  Spec: docs/superpowers/specs/2026-05-16-onboarding-wizard-design.md
 - **SQLite over a file-based store**: Chosen for FTS5 support and transactional safety
   without a server dependency.
 - **XMP UUID in PDF**: Ensures document identity survives moves and renames outside the
