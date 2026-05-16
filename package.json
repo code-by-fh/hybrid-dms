@@ -29,8 +29,7 @@
       "node_modules/pdfjs-dist/**/*"
     ],
     "win": {
-      "target": "portable",
-      "arch": ["x64"]
+      "target": [{ "target": "portable", "arch": ["x64"] }]
     }
   },
   "dependencies": {
