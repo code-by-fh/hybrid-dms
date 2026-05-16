@@ -19,11 +19,6 @@ if (typeof global !== 'undefined') {
   }
 }
 
-// Convert import.meta.url to __dirname equivalent for ES modules
-// But wait, ts-node or electron might use commonjs.
-// Since we set "module": "CommonJS" in tsconfig.electron.json, __dirname is available.
-const __dirname = path.resolve(); // fallback
-
 let mainWindow: BrowserWindow | null = null;
 let tray: Tray | null = null;
 let searchWindow: BrowserWindow | null = null;
@@ -47,7 +42,7 @@ function createSearchWindow() {
     alwaysOnTop: true,
     skipTaskbar: true,
     webPreferences: {
-      preload: path.join(__dirname, 'dist-electron', 'preload.js'),
+      preload: path.join(app.getAppPath(), 'dist-electron', 'preload.js'),
       nodeIntegration: false,
       contextIsolation: true,
     },
@@ -56,7 +51,7 @@ function createSearchWindow() {
   if (process.env.VITE_DEV_SERVER_URL) {
     searchWindow.loadURL(process.env.VITE_DEV_SERVER_URL + 'src/search.html');
   } else {
-    searchWindow.loadFile(path.join(__dirname, 'dist', 'src', 'search.html'));
+    searchWindow.loadFile(path.join(app.getAppPath(), 'dist', 'src', 'search.html'));
   }
 
   let blurTimer: ReturnType<typeof setTimeout> | null = null;
@@ -89,7 +84,7 @@ function createWindow() {
     width: 1200,
     height: 800,
     webPreferences: {
-      preload: path.join(__dirname, 'dist-electron', 'preload.js'),
+      preload: path.join(app.getAppPath(), 'dist-electron', 'preload.js'),
       nodeIntegration: false,
       contextIsolation: true,
       webSecurity: false // allow local file loading for pdf viewer
@@ -108,7 +103,7 @@ function createWindow() {
     mainWindow.loadURL(process.env.VITE_DEV_SERVER_URL);
     mainWindow.webContents.openDevTools();
   } else {
-    mainWindow.loadFile(path.join(__dirname, 'dist', 'index.html'));
+    mainWindow.loadFile(path.join(app.getAppPath(), 'dist', 'index.html'));
   }
 }
 
@@ -119,16 +114,6 @@ app.whenReady().then(async () => {
   initLogger();
   log('info', '[Main] App starting');
 
-  // Configure pdfjs-dist worker globally
-  try {
-    const pdfjsLib = await import('pdfjs-dist/legacy/build/pdf.mjs');
-    const workerPath = path.join(app.getAppPath(), 'node_modules', 'pdfjs-dist', 'legacy', 'build', 'pdf.worker.mjs');
-    pdfjsLib.GlobalWorkerOptions.workerSrc = workerPath;
-    console.log(`[Main] Global pdfjs worker configured: ${workerPath}`);
-  } catch (e) {
-    console.warn(`[Main] Failed to configure global pdfjs worker`, e);
-  }
-
   // Start Sync Engine Watcher
   startWatcher(() => {
       if (mainWindow) {
@@ -137,6 +122,15 @@ app.whenReady().then(async () => {
   });
 
   createWindow();
+
+  // Configure pdfjs-dist worker globally (non-blocking)
+  import('pdfjs-dist/legacy/build/pdf.mjs').then((pdfjsLib) => {
+    const workerPath = path.join(app.getAppPath(), 'node_modules', 'pdfjs-dist', 'legacy', 'build', 'pdf.worker.mjs');
+    pdfjsLib.GlobalWorkerOptions.workerSrc = workerPath;
+  }).catch((e) => {
+    console.warn(`[Main] Failed to configure global pdfjs worker`, e);
+  });
+
   try {
     createTray();
   } catch (e) {
