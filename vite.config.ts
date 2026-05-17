@@ -14,7 +14,7 @@ export default defineConfig({
         vite: {
           build: {
             rollupOptions: {
-              external: ['better-sqlite3', 'pdf-parse', 'chokidar', 'pdf-lib', 'tesseract.js', 'pdfjs-dist/legacy/build/pdf.mjs', 'canvas']
+              external: ['better-sqlite3', 'pdf-parse', 'chokidar', 'pdf-lib', 'tesseract.js', 'pdfjs-dist/legacy/build/pdf.mjs', 'canvas', 'node-llama-cpp']
             }
           }
         }

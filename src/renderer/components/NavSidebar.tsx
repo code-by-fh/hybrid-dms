@@ -94,7 +94,7 @@ export const NavSidebar: React.FC<NavSidebarProps> = ({ currentView, onViewChang
         </button>
         
         <div className="mt-4 px-4 py-2 bg-bg-app/50 rounded-lg border border-border-base">
-          <p className="text-[10px] text-text-subtle uppercase tracking-wider font-bold">Ollama KI Status</p>
+          <p className="text-[10px] text-text-subtle uppercase tracking-wider font-bold">KI Status</p>
           <div className="flex items-center mt-1">
             <div className={`w-2 h-2 rounded-full mr-2 ${ollamaStatus ? 'bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.6)]' : 'bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.6)]'}`}></div>
             <span className="text-xs text-text-subtle">{ollamaStatus ? 'KI Verbunden' : 'KI Offline'}</span>

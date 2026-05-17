@@ -52,12 +52,12 @@ function App() {
         });
       });
       
-      // Check Ollama status
-      const checkOllama = () => {
-        window.electronAPI.checkOllamaStatus().then(setOllamaStatus);
+      // Check AI backend status (works for ollama, gguf, and managed backends)
+      const checkAi = () => {
+        window.electronAPI.checkAiBackend().then(setOllamaStatus);
       };
-      checkOllama();
-      const interval = setInterval(checkOllama, 30000); // every 30s
+      checkAi();
+      const interval = setInterval(checkAi, 30000); // every 30s
 
       // Crawler status
       ;(window.electronAPI as any).getCrawlerStatus().then((s: { running: boolean }) => setCrawlerRunning(s.running));

@@ -44,6 +44,21 @@ Onboarding wizard implemented. Pending: merge to main, package + test as .exe.
 
 - None (onboarding-wizard branch complete, not yet merged).
 
+## Recent Fixes (2026-05-17, session 3)
+
+- Inbox pipeline broken for `managed` AI backend: `download-model` was saving files by their URL filename (e.g. `Qwen2.5-3B-Instruct-Q4_K_M.gguf`) but `aiService.ts` looks for `AI_MODEL_NAME + '.gguf'` (e.g. `qwen2.5-3b-q4.gguf`). Fixed by saving downloaded files as `modelKey + '.gguf'`. `check-model-downloaded` and `delete-model` updated to use the same key-based path, with legacy backwards-compat rename on first check.
+- Onboarding wizard: previously selected managed model not checkmarked on re-open. Fixed by initialising `managedModel` from `AI_MODEL_NAME` when `AI_BACKEND === 'managed'`. Also fixed `handleFinish` to use `managedModel` (not `ollamaModel`) as `AI_MODEL_NAME` when backend is `managed`.
+
+## Recent Fixes (2026-05-17, session 2)
+
+- GGUF model load failure: added CPU-only fallback (`gpuLayers: 0`) when GPU load fails in `analyzeWithGguf`; improved error logging to include model path.
+- Crawler UNIQUE constraint crash: Excluded `INBOX_PATH` and `PROCESSING_PATH` from the crawler's directory walk (since crawler is only for archived files). Added robust re-checks for document existence in the database after async operations (`calculateHash`, `writeXmpMetadata`) to completely resolve and prevent concurrent race conditions between the crawler and folder watcher.
+- AI status indicator showed red for non-Ollama backends: `App.tsx` now polls `checkAiBackend()` (backend-agnostic) instead of `checkOllamaStatus()`; NavSidebar label updated from "Ollama KI Status" → "KI Status".
+- Managed model download 401 fix: replaced gated Gemma/Llama URLs with open Qwen2.5 (3B, 7B) and Phi-3.5-mini models (no HuggingFace auth required).
+- Download error handling: partial file is deleted on failure; error is shown in UI with "Erneut versuchen" link.
+- Download progress bug: UI now correctly maps `downloadedBytes/totalBytes` → `percent` from IPC event (was undefined before).
+- Model deletion: added `delete-model` + `check-model-downloaded` IPC handlers; UI shows "Modell löschen" button next to "Bereit" badge; checks all models on mount to detect pre-existing downloads.
+
 ## Next Up
 
 - (No active roadmap — see Open Questions for potential next work)

@@ -10,6 +10,7 @@ import { analyzeDocumentWithAI, buildFilename } from './aiService.js';
 import { performOCR } from './ocrService.js';
 import { readDocumentUuid, writeXmpMetadata } from './xmpService.js';
 import { PDFParse } from 'pdf-parse';
+import { log } from './logger.js';
 
 // Konfiguration der Pfade dynamisch aus der DB laden
 export function getConfig() {
@@ -25,6 +26,7 @@ export function getConfig() {
     AI_MODEL_NAME: getSetting('AI_MODEL_NAME', getSetting('OLLAMA_MODEL', 'llama3.2')),
     GGUF_MODEL_PATH: getSetting('GGUF_MODEL_PATH', ''),
     OCR_LANGUAGES: getSetting('OCR_LANGUAGES', 'deu+eng'),
+    GGUF_FORCE_CPU: getSetting('GGUF_FORCE_CPU', 'false'),
   };
   return config;
 }
@@ -45,17 +47,21 @@ let activeInboxProcessing = 0;
 const inboxQueue: Array<() => Promise<void>> = [];
 
 function runNextInQueue() {
+  log('info', `[Pipeline Queue] Checking run: active=${activeInboxProcessing}, queueLength=${inboxQueue.length}`);
   if (activeInboxProcessing >= MAX_CONCURRENT_INBOX || inboxQueue.length === 0) return;
   activeInboxProcessing++;
   const task = inboxQueue.shift()!;
+  log('info', `[Pipeline Queue] Starting task. Active processing is now ${activeInboxProcessing}`);
   task().finally(() => {
     activeInboxProcessing--;
+    log('info', `[Pipeline Queue] Task finished. Active processing is now ${activeInboxProcessing}`);
     runNextInQueue();
   });
 }
 
 function enqueueInboxFile(task: () => Promise<void>) {
   inboxQueue.push(task);
+  log('info', `[Pipeline Queue] Enqueued new file. Queue length: ${inboxQueue.length}`);
   runNextInQueue();
 }
 
@@ -64,23 +70,35 @@ let currentWatcher: chokidar.FSWatcher | null = null;
 
 async function processInboxFile(uuid: string, hash: string, normalizedPath: string, onDbChange?: () => void) {
   const config = getConfig();
-  console.log(`[Pipeline] Starting for uuid=${uuid} hash=${hash} path=${normalizedPath}`);
+  log('info', `[Pipeline] Starting for uuid=${uuid} hash=${hash} path=${normalizedPath}`);
 
   // STEP 1: PDF text extraction
-  const dataBuffer = await fs.readFile(normalizedPath);
+  let dataBuffer;
+  try {
+    dataBuffer = await fs.readFile(normalizedPath);
+  } catch (readErr) {
+    log('error', `[Pipeline] Failed to read file ${normalizedPath}:`, readErr);
+    updateDocumentStatus(hash, 'error');
+    if (onDbChange) onDbChange();
+    return;
+  }
+
   let hasText = false;
   let extractedText = '';
   try {
+    log('info', `[Pipeline] Parsing PDF: ${normalizedPath}`);
     const parser = new PDFParse({ data: dataBuffer });
     const pdfData = await parser.getText();
     await parser.destroy();
     extractedText = pdfData.text || '';
     hasText = extractedText.trim().length > 50;
+    log('info', `[Pipeline] PDF parse completed. hasText=${hasText}, length=${extractedText.trim().length}`);
   } catch (e) {
-    console.error(`[Pipeline] PDFParse failed:`, e);
+    log('error', `[Pipeline] PDFParse failed:`, e);
   }
 
   // STEP 2: Update DB with OCR flag
+  log('info', `[Pipeline] Updating metadata in DB for ${hash}, needsOcr=${!hasText}`);
   updateDocumentMetadata(hash, '[]', JSON.stringify({ needsOcr: !hasText }), 'new');
   if (onDbChange) onDbChange();
 
@@ -132,7 +150,7 @@ async function processInboxFile(uuid: string, hash: string, normalizedPath: stri
   const ext = path.extname(normalizedPath);
   const baseName = aiResult.suggestedFilename ||
     buildFilename(aiResult.date || '', aiResult.docType || '', aiResult.sender || '');
-  const newFileName = baseName + ext;
+  const newFileName = baseName.toLowerCase().endsWith('.pdf') ? baseName : baseName + ext;
   const archivePath = aiResult.archivePath || 'Sonstiges';
 
   const aiMetadata = JSON.stringify({
@@ -182,7 +200,7 @@ export function startWatcher(onDbChange?: () => void) {
   const config = getConfig();
   
   const watchPaths = [config.INBOX_PATH, config.PROCESSING_PATH, config.ARCHIVE_PATH];
-  console.log(`[Sync] Starting watcher for paths:`, watchPaths);
+  log('info', `[Sync] Starting watcher for paths: ${JSON.stringify(watchPaths)}`);
   
   currentWatcher = chokidar.watch(watchPaths, {
     ignored: [/(^|[\/\\])\.\./, /\.dmstmp$/],
@@ -192,6 +210,7 @@ export function startWatcher(onDbChange?: () => void) {
 
   currentWatcher.on('add', async (filePath) => {
     const normalizedPath = path.normalize(filePath);
+    log('info', `[Watcher] add event for path: ${normalizedPath}`);
     try {
       const config = getConfig();
       const filePathLower = normalizedPath.toLowerCase();
@@ -199,41 +218,52 @@ export function startWatcher(onDbChange?: () => void) {
 
       // Try UUID from XMP first (fast path for known files — avoids hashing)
       const xmpUuid = await readDocumentUuid(normalizedPath);
+      log('info', `[Watcher] Checked XMP UUID for ${normalizedPath}: ${xmpUuid}`);
       if (xmpUuid) {
         const existing = getDocumentByUuid(xmpUuid);
         if (existing) {
+          log('info', `[Watcher] Found existing doc by UUID: ${xmpUuid}, status=${existing.status}, path=${existing.last_path}`);
           if (!isInInboxDir) {
             // Known file outside inbox — update path if changed, done
             if (path.normalize(existing.last_path).toLowerCase() !== filePathLower) {
+              log('info', `[Watcher] Updating path in DB for UUID ${xmpUuid} to ${normalizedPath}`);
               updateDocumentPath(existing.hash, normalizedPath);
               if (onDbChange) onDbChange();
             }
             return;
           }
           // Known file back in inbox — delete record so it can be reprocessed fresh
+          log('info', `[Watcher] Known file ${xmpUuid} back in inbox, deleting old path record: ${existing.last_path}`);
           deleteDocumentByPath(existing.last_path);
           // Fall through to new-file pipeline below
         }
       }
 
       // Hash-based path (new files or files without UUID in XMP)
+      log('info', `[Watcher] Calculating hash for ${normalizedPath}`);
       const hash = await calculateHash(normalizedPath);
       const existing = getDocumentByHash(hash);
+      log('info', `[Watcher] Hash for ${normalizedPath}: ${hash}, existing found=${!!existing}`);
 
       if (existing) {
         const existingPathLower = path.normalize(existing.last_path).toLowerCase();
+        log('info', `[Watcher] Existing status=${existing.status}, path=${existing.last_path}`);
         if (existingPathLower === filePathLower) {
           if (isInInboxDir && (existing.status === 'new' || existing.status === 'error')) {
+            log('info', `[Watcher] File matches existing path in inbox in state new/error. Deleting old record to reprocess.`);
             deleteDocumentByPath(existing.last_path);
             // Fall through to new-file pipeline
           } else {
+            log('info', `[Watcher] File matches existing path but status is ${existing.status}. Skipping.`);
             return;
           }
         } else {
           if (isInInboxDir) {
+            log('info', `[Watcher] Same hash found in inbox but path changed from ${existing.last_path} to ${normalizedPath}. Deleting old record.`);
             deleteDocumentByPath(existing.last_path);
             // Fall through to new-file pipeline
           } else {
+            log('info', `[Watcher] Same hash found outside inbox, updating path to ${normalizedPath}`);
             updateDocumentPath(hash, normalizedPath);
             if (onDbChange) onDbChange();
             return;
@@ -244,10 +274,11 @@ export function startWatcher(onDbChange?: () => void) {
       if (!isInInboxDir) {
         // Unknown file outside inbox — generate UUID, index as processed
         const newUuid = xmpUuid || crypto.randomUUID();
+        log('info', `[Watcher] Unknown file outside inbox: ${normalizedPath}. Generating/using UUID: ${newUuid}`);
         insertDocumentWithUuid(newUuid, hash, normalizedPath, '[]', '{}', 'processed');
         if (!xmpUuid) {
           writeXmpMetadata(normalizedPath, newUuid, []).catch(e =>
-            console.warn(`[Watcher] XMP write failed for archive file:`, e)
+            log('warn', `[Watcher] XMP write failed for archive file: ${e}`)
           );
         }
         if (onDbChange) onDbChange();
@@ -256,13 +287,14 @@ export function startWatcher(onDbChange?: () => void) {
 
       // New inbox file — generate UUID and start pipeline
       const uuid = xmpUuid || crypto.randomUUID();
+      log('info', `[Watcher] Enqueueing new inbox file: ${normalizedPath}, uuid=${uuid}, hash=${hash}`);
       insertDocumentWithUuid(uuid, hash, normalizedPath, '[]', '{}', 'new');
       if (onDbChange) onDbChange();
 
       enqueueInboxFile(() => processInboxFile(uuid, hash, normalizedPath, onDbChange));
 
     } catch (err) {
-      console.error(`[Watcher] Error for ${normalizedPath}:`, err);
+      log('error', `[Watcher] Error for ${normalizedPath}:`, err);
     }
   });
 
@@ -304,7 +336,15 @@ export async function runUuidCrawler(
   const config = getConfig();
 
   try {
-    const files = await walkDir(config.ARCHIVE_PATH, config.EXCLUDE_FOLDERS);
+    const inboxPath = path.normalize(config.INBOX_PATH);
+    const processingPath = path.normalize(config.PROCESSING_PATH);
+    const excludeFolders = [
+      ...config.EXCLUDE_FOLDERS.map(f => path.normalize(f)),
+      inboxPath,
+      processingPath
+    ];
+
+    const files = await walkDir(config.ARCHIVE_PATH, excludeFolders);
     console.log(`[Crawler] Found ${files.length} files in archive`);
 
     for (const filePath of files) {
@@ -323,8 +363,18 @@ export async function runUuidCrawler(
           } else {
             // UUID in PDF but not in DB (e.g., another computer imported it)
             const hash = await calculateHash(normalizedPath);
-            insertDocumentWithUuid(xmpUuid, hash, normalizedPath, '[]', '{}', 'processed');
-            if (onDbChange) onDbChange();
+            // Re-check after async hash calculation to avoid race conditions
+            const existingAgain = getDocumentByUuid(xmpUuid);
+            if (existingAgain) {
+              if (path.normalize(existingAgain.last_path).toLowerCase() !== normalizedPath.toLowerCase()) {
+                console.log(`[Crawler] Path updated for ${xmpUuid} (resolved race)`);
+                updateDocumentPath(existingAgain.hash, normalizedPath);
+                if (onDbChange) onDbChange();
+              }
+            } else {
+              insertDocumentWithUuid(xmpUuid, hash, normalizedPath, '[]', '{}', 'processed');
+              if (onDbChange) onDbChange();
+            }
           }
         } else {
           // No UUID in PDF — assign one and write it
@@ -341,8 +391,25 @@ export async function runUuidCrawler(
             // Completely new file — generate UUID, write XMP, index as processed
             const uuid = crypto.randomUUID();
             await writeXmpMetadata(normalizedPath, uuid, []);
-            insertDocumentWithUuid(uuid, hash, normalizedPath, '[]', '{}', 'processed');
-            if (onDbChange) onDbChange();
+            
+            // Re-check if hash or uuid was inserted concurrently by another process during XMP write
+            const existingHashAgain = getDocumentByHash(hash);
+            if (existingHashAgain) {
+              const finalUuid = existingHashAgain.uuid || uuid;
+              if (!existingHashAgain.uuid) {
+                updateDocumentUuid(hash, finalUuid);
+              }
+              if (path.normalize(existingHashAgain.last_path).toLowerCase() !== normalizedPath.toLowerCase()) {
+                updateDocumentPath(hash, normalizedPath);
+              }
+            } else {
+              // Re-check by UUID just in case
+              const existingUuidAgain = getDocumentByUuid(uuid);
+              if (!existingUuidAgain) {
+                insertDocumentWithUuid(uuid, hash, normalizedPath, '[]', '{}', 'processed');
+                if (onDbChange) onDbChange();
+              }
+            }
           }
         }
       } catch (e) {
@@ -401,7 +468,7 @@ export async function processPendingDocuments(onDbChange?: () => void) {
                     const ext = path.extname(doc.last_path);
                     const baseName = aiResult.suggestedFilename ||
                         buildFilename(aiResult.date || '', aiResult.docType || '', aiResult.sender || '');
-                    const newFileName = baseName + ext;
+                    const newFileName = baseName.toLowerCase().endsWith('.pdf') ? baseName : baseName + ext;
                     const archivePath = aiResult.archivePath || 'Sonstiges';
                     const newMetadata = JSON.stringify({
                         sender: aiResult.sender || '',

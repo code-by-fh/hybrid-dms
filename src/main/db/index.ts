@@ -71,9 +71,10 @@ export function getSetting(key: string, defaultValue: string = ''): string {
   return row ? row.value : defaultValue;
 }
 
-export function setSetting(key: string, value: string) {
+export function setSetting(key: string, value: unknown) {
   const stmt = db.prepare('INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)');
-  return stmt.run(key, value);
+  const strValue = Array.isArray(value) ? (value as string[]).join(',') : String(value ?? '');
+  return stmt.run(key, strValue);
 }
 
 export function insertDocument(hash: string, lastPath: string, tags?: string, metadata?: string, status: string = 'new') {

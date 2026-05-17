@@ -19,6 +19,7 @@ A local document management system (DMS) built as an Electron desktop app for Wi
 5. **Archive** — Documents are stored in the configured directory structure. Each PDF receives a UUID written into its XMP metadata field, so renames and moves are tracked reliably.
 
 **Additional features:**
+
 - Full-text search across all archived documents (SQLite FTS5), accessible via the global shortcut `Ctrl+Alt+D` from any application
 - Fast global search window (frameless, always on top)
 - Archive tree view with drag & drop for moving documents between folders
@@ -28,11 +29,11 @@ A local document management system (DMS) built as an Electron desktop app for Wi
 
 ## Requirements
 
-| Dependency | Version | Notes |
-|---|---|---|
-| Node.js | ≥ 18 | Required for development and build |
-| Ollama | current | Must be running locally: [ollama.com](https://ollama.com) |
-| LLM model | — | e.g. `llama3.2` via `ollama pull llama3.2` |
+| Dependency | Version | Notes                                                     |
+| ---------- | ------- | --------------------------------------------------------- |
+| Node.js    | ≥ 18    | Required for development and build                        |
+| Ollama     | current | Must be running locally: [ollama.com](https://ollama.com) |
+| LLM model  | —       | e.g. `llama3.2` via `ollama pull llama3.2`                |
 
 ## Installation & Development
 
@@ -62,15 +63,15 @@ On first launch the app automatically creates default folders in the app data pa
 
 **Open settings:** Gear icon in the top right of the app.
 
-| Setting | Description |
-|---|---|
-| **Inbox path** | Folder watched for new PDFs. Files dropped here start the pipeline automatically. |
-| **Processing path (Sortieren)** | Temporary staging folder. Documents wait here until manually moved to the archive. |
-| **Archive path** | Root directory of the document archive. Shown as a directory tree in the app. |
-| **Excluded folders** | Comma-separated folder names to ignore during archive scans (e.g. `.git, Temp`). |
-| **Ollama API URL** | Default: `http://localhost:11434`. Change if Ollama runs on a different port or host. |
-| **Ollama model** | Name of the model to use, e.g. `llama3.2`. Must be pulled first via `ollama pull <model>`. |
-| **Log file path** | Optional custom path for the log file. |
+| Setting                         | Description                                                                                |
+| ------------------------------- | ------------------------------------------------------------------------------------------ |
+| **Inbox path**                  | Folder watched for new PDFs. Files dropped here start the pipeline automatically.          |
+| **Processing path (Sortieren)** | Temporary staging folder. Documents wait here until manually moved to the archive.         |
+| **Archive path**                | Root directory of the document archive. Shown as a directory tree in the app.              |
+| **Excluded folders**            | Comma-separated folder names to ignore during archive scans (e.g. `.git, Temp`).           |
+| **Ollama API URL**              | Default: `http://localhost:11434`. Change if Ollama runs on a different port or host.      |
+| **Ollama model**                | Name of the model to use, e.g. `llama3.2`. Must be pulled first via `ollama pull <model>`. |
+| **Log file path**               | Optional custom path for the log file.                                                     |
 
 After saving, the app immediately checks the Ollama connection and reports whether the configured model is available.
 
@@ -93,8 +94,8 @@ Review view in the app
 
 ## Keyboard shortcuts
 
-| Shortcut | Action |
-|---|---|
+| Shortcut     | Action                                                    |
+| ------------ | --------------------------------------------------------- |
 | `Ctrl+Alt+D` | Open / close the global search window (works system-wide) |
 
 ## Notes

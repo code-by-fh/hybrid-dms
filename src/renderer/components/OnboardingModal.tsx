@@ -33,16 +33,20 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({
 }) => {
   const [currentStep, setCurrentStep] = useState(0);
 
+  const initialBackend = (initialSettings.AI_BACKEND as BackendType) || 'ollama';
+
   const [data, setData] = useState({
-    backend: (initialSettings.AI_BACKEND as BackendType) || 'ollama',
+    backend: initialBackend,
     ollamaUrl: initialSettings.AI_URL || 'http://localhost:11434',
-    ollamaModel: initialSettings.AI_MODEL_NAME || 'llama3.2',
+    ollamaModel: initialBackend !== 'managed' ? (initialSettings.AI_MODEL_NAME || 'llama3.2') : 'llama3.2',
     ggufPath: initialSettings.GGUF_MODEL_PATH || '',
-    managedModel: '',
+    managedModel: initialBackend === 'managed' ? (initialSettings.AI_MODEL_NAME || '') : '',
     inbox: initialSettings.INBOX_PATH || '',
     sortieren: initialSettings.PROCESSING_PATH || '',
     archiv: initialSettings.ARCHIVE_PATH || '',
-    excludeFolders: initialSettings.EXCLUDE_FOLDERS || '',
+    excludeFolders: Array.isArray(initialSettings.EXCLUDE_FOLDERS)
+      ? (initialSettings.EXCLUDE_FOLDERS as unknown as string[]).join(',')
+      : (initialSettings.EXCLUDE_FOLDERS || ''),
     ocrLanguages: initialSettings.OCR_LANGUAGES || 'deu+eng',
   });
 
@@ -57,10 +61,17 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({
   };
 
   const handleFinish = async () => {
+    // For managed backend, AI_MODEL_NAME must be the managed model key.
+    // For ollama backend, it's the ollama model name.
+    // For gguf backend, it's not used but we keep ollamaModel for legacy compat.
+    const aiModelName =
+      data.backend === 'managed' ? data.managedModel :
+      data.backend === 'ollama'  ? data.ollamaModel :
+      data.ollamaModel;
     await window.electronAPI.updateSettings({
       AI_BACKEND: data.backend,
       AI_URL: data.ollamaUrl,
-      AI_MODEL_NAME: data.managedModel || data.ollamaModel,
+      AI_MODEL_NAME: aiModelName,
       GGUF_MODEL_PATH: data.ggufPath,
       INBOX_PATH: data.inbox,
       PROCESSING_PATH: data.sortieren,

@@ -14,7 +14,7 @@
     "appId": "com.doublelayer.documents-dms",
     "productName": "Documents DMS",
     "directories": {
-      "output": "release"
+      "output": "release3"
     },
     "files": [
       "dist/**/*",

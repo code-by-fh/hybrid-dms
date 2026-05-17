@@ -1,6 +1,7 @@
 import { createWorker } from 'tesseract.js';
 import path from 'path';
 import fs from 'fs/promises';
+import { pathToFileURL } from 'url';
 import { createCanvas, ImageData } from 'canvas';
 import { getSetting } from '../db/index.js';
 
@@ -92,9 +93,8 @@ async function processPdf(filePath: string): Promise<string> {
   const pdfjsLib = await import('pdfjs-dist/legacy/build/pdf.mjs');
   if (!pdfjsLib.GlobalWorkerOptions.workerSrc) {
     const { app } = await import('electron');
-    pdfjsLib.GlobalWorkerOptions.workerSrc = path.join(
-      app.getAppPath(), 'node_modules', 'pdfjs-dist', 'legacy', 'build', 'pdf.worker.mjs'
-    );
+    const workerPath = path.join(app.getAppPath(), 'node_modules', 'pdfjs-dist', 'legacy', 'build', 'pdf.worker.mjs');
+    pdfjsLib.GlobalWorkerOptions.workerSrc = pathToFileURL(workerPath).href;
   }
   const { app } = await import('electron');
   const fontsPath = path

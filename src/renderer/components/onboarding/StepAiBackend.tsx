@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Bot, HardDrive, Download, CheckCircle, AlertCircle, Loader } from 'lucide-react';
+import { Bot, HardDrive, Download, CheckCircle, AlertCircle, Loader, Trash2, FolderOpen } from 'lucide-react';
 
 type BackendType = 'ollama' | 'gguf' | 'managed';
 
@@ -41,12 +41,14 @@ interface DownloadProgress {
 type DownloadState =
   | { phase: 'idle' }
   | { phase: 'downloading'; progress: DownloadProgress }
-  | { phase: 'done' };
+  | { phase: 'done' }
+  | { phase: 'error'; message: string };
 
 const MANAGED_MODELS = [
-  { key: 'gemma-4-4b-q4', label: 'Gemma 4 4B', detail: 'Q4_K_M — ca. 3,3 GB' },
-  { key: 'gemma-4-12b-q4', label: 'Gemma 4 12B', detail: 'Q4_K_M — ca. 8,1 GB' },
-  { key: 'llama-3.2-3b-q4', label: 'Llama 3.2 3B', detail: 'Q4_K_M — ca. 2,0 GB' },
+  { key: 'gemma-3-4b-q4', label: 'Gemma 3 4B', detail: 'Q4_K_M — ca. 2,5 GB', gated: false },
+  { key: 'qwen2.5-3b-q4', label: 'Qwen 2.5 3B', detail: 'Q4_K_M — ca. 2,0 GB', gated: false },
+  { key: 'qwen2.5-7b-q4', label: 'Qwen 2.5 7B', detail: 'Q4_K_M — ca. 4,7 GB', gated: false },
+  { key: 'phi-3.5-mini-q4', label: 'Phi-3.5 Mini', detail: 'Q4_K_M — ca. 2,2 GB', gated: false },
 ] as const;
 
 function formatBytes(bytes: number): string {
@@ -88,13 +90,14 @@ export const StepAiBackend: React.FC<StepAiBackendProps> = ({
 
   const [ollamaStatus, setOllamaStatus] = useState<OllamaStatus>({ state: 'idle' });
   const [downloadState, setDownloadState] = useState<DownloadState>({ phase: 'idle' });
+  const [downloadedModels, setDownloadedModels] = useState<Set<string>>(new Set());
 
   // Compute validity and notify parent
   const computeValid = useCallback(
-    (b: BackendType, gPath: string, dl: DownloadState): boolean => {
+    (b: BackendType, gPath: string, dl: DownloadState, mModel: string, downloaded: Set<string>): boolean => {
       if (b === 'ollama') return true;
       if (b === 'gguf') return gPath.trim().length > 0;
-      if (b === 'managed') return dl.phase === 'done';
+      if (b === 'managed') return dl.phase === 'done' || downloaded.has(mModel);
       return false;
     },
     [],
@@ -109,16 +112,33 @@ export const StepAiBackend: React.FC<StepAiBackendProps> = ({
       gPath: string,
       mModel: string,
       dl: DownloadState,
+      downloaded: Set<string>,
     ) => {
       onChange({ backend: b, ollamaUrl: url, ollamaModel: model, ggufPath: gPath, managedModel: mModel });
-      onValidChange(computeValid(b, gPath, dl));
+      onValidChange(computeValid(b, gPath, dl, mModel, downloaded));
     },
     [onChange, onValidChange, computeValid],
   );
 
-  // Initial validity signal
+  // Initial validity signal + check which models are already on disk
   useEffect(() => {
-    onValidChange(computeValid(initialBackend, initialGgufPath, downloadState));
+    onValidChange(computeValid(initialBackend, initialGgufPath, downloadState, initialManagedModel, downloadedModels));
+
+    const checkDownloaded = async () => {
+      const downloaded = new Set<string>();
+      for (const m of MANAGED_MODELS) {
+        const ok: boolean = await electronAny.checkModelDownloaded(m.key);
+        if (ok) downloaded.add(m.key);
+      }
+      setDownloadedModels(downloaded);
+      if (initialManagedModel && downloaded.has(initialManagedModel)) {
+        setDownloadState({ phase: 'done' });
+      }
+      onValidChange(computeValid(initialBackend, initialGgufPath, { phase: initialManagedModel && downloaded.has(initialManagedModel) ? 'done' : 'idle' }, initialManagedModel, downloaded));
+    };
+    if (typeof electronAny.checkModelDownloaded === 'function') {
+      checkDownloaded();
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -126,43 +146,52 @@ export const StepAiBackend: React.FC<StepAiBackendProps> = ({
   useEffect(() => {
     if (typeof electronAny.onDownloadProgress !== 'function') return;
 
-    const cleanup = electronAny.onDownloadProgress((progress: DownloadProgress) => {
-      if (progress.done) {
+    const cleanup = electronAny.onDownloadProgress((raw: {
+      modelKey: string;
+      downloadedBytes: number;
+      totalBytes: number;
+      speedBytesPerSec: number;
+      done?: boolean;
+    }) => {
+      if (raw.done) {
+        setDownloadedModels(prev => new Set([...prev, raw.modelKey]));
         setDownloadState({ phase: 'done' });
         setManagedModel(prev => {
-          notifyChange(backend, ollamaUrl, ollamaModel, ggufPath, prev, { phase: 'done' });
+          notifyChange(backend, ollamaUrl, ollamaModel, ggufPath, prev, { phase: 'done' }, new Set([...downloadedModels, raw.modelKey]));
           return prev;
         });
       } else {
-        setDownloadState({ phase: 'downloading', progress });
+        const percent = raw.totalBytes > 0 ? Math.round((raw.downloadedBytes / raw.totalBytes) * 100) : 0;
+        setDownloadState({
+          phase: 'downloading',
+          progress: { percent, downloaded: raw.downloadedBytes, total: raw.totalBytes, speed: raw.speedBytesPerSec, done: false },
+        });
       }
     });
 
     return () => {
       if (typeof cleanup === 'function') cleanup();
     };
-    // We only register once on mount; parent values captured here are stale but
-    // the notifyChange inside setManagedModel uses closures over latest refs.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // --- Backend selection ---
   const selectBackend = (b: BackendType) => {
     setBackend(b);
-    notifyChange(b, ollamaUrl, ollamaModel, ggufPath, managedModel, downloadState);
+    notifyChange(b, ollamaUrl, ollamaModel, ggufPath, managedModel, downloadState, downloadedModels);
   };
 
   // --- Ollama config handlers ---
   const handleOllamaUrlChange = (url: string) => {
     setOllamaUrl(url);
     setOllamaStatus({ state: 'idle' });
-    notifyChange(backend, url, ollamaModel, ggufPath, managedModel, downloadState);
+    notifyChange(backend, url, ollamaModel, ggufPath, managedModel, downloadState, downloadedModels);
   };
 
   const handleOllamaModelChange = (model: string) => {
     setOllamaModel(model);
     setOllamaStatus({ state: 'idle' });
-    notifyChange(backend, ollamaUrl, model, ggufPath, managedModel, downloadState);
+    notifyChange(backend, ollamaUrl, model, ggufPath, managedModel, downloadState, downloadedModels);
   };
 
   const handleCheckOllama = async () => {
@@ -187,7 +216,7 @@ export const StepAiBackend: React.FC<StepAiBackendProps> = ({
       });
       if (result) {
         setGgufPath(result);
-        notifyChange(backend, ollamaUrl, ollamaModel, result, managedModel, downloadState);
+        notifyChange(backend, ollamaUrl, ollamaModel, result, managedModel, downloadState, downloadedModels);
       }
     } catch {
       // Silently ignore — user cancelled or dialog failed
@@ -199,16 +228,35 @@ export const StepAiBackend: React.FC<StepAiBackendProps> = ({
   // --- Managed model handlers ---
   const handleSelectManagedModel = (key: string) => {
     setManagedModel(key);
-    notifyChange(backend, ollamaUrl, ollamaModel, ggufPath, key, downloadState);
+    const alreadyDone = downloadedModels.has(key);
+    const dl: DownloadState = alreadyDone ? { phase: 'done' } : { phase: 'idle' };
+    setDownloadState(dl);
+    notifyChange(backend, ollamaUrl, ollamaModel, ggufPath, key, dl, downloadedModels);
   };
 
   const handleDownload = async () => {
     if (!managedModel || downloadState.phase === 'downloading') return;
     setDownloadState({ phase: 'downloading', progress: { percent: 0, downloaded: 0, total: 0, speed: 0, done: false } });
-    try {
-      await electronAny.downloadModel(managedModel);
-    } catch {
-      // Progress listener drives the state; errors surface via UI if needed
+    const result = await electronAny.downloadModel(managedModel);
+    if (result && !result.success) {
+      setDownloadState({ phase: 'error', message: result.error ?? 'Download fehlgeschlagen' });
+    }
+    // success is driven by onDownloadProgress 'done' event
+  };
+
+
+  const handleDelete = async () => {
+    if (!managedModel) return;
+    const result = await electronAny.deleteModel(managedModel);
+    if (result?.success) {
+      setDownloadedModels(prev => {
+        const next = new Set(prev);
+        next.delete(managedModel);
+        return next;
+      });
+      const dl: DownloadState = { phase: 'idle' };
+      setDownloadState(dl);
+      notifyChange(backend, ollamaUrl, ollamaModel, ggufPath, managedModel, dl, new Set([...downloadedModels].filter(k => k !== managedModel)));
     }
   };
 
@@ -365,25 +413,55 @@ export const StepAiBackend: React.FC<StepAiBackendProps> = ({
                     onChange={() => handleSelectManagedModel(m.key)}
                     className="accent-[var(--accent)]"
                   />
-                  <div className="flex flex-col">
-                    <span className="text-sm font-semibold text-text-main">{m.label}</span>
+                  <div className="flex flex-col flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-semibold text-text-main">{m.label}</span>
+                      {downloadedModels.has(m.key) && (
+                        <span className="text-xs px-1.5 py-0.5 rounded bg-green-100 text-green-800 font-medium">Vorhanden</span>
+                      )}
+                    </div>
                     <span className="text-xs text-text-subtle font-mono">{m.detail}</span>
                   </div>
                 </label>
               ))}
             </div>
 
-            {/* Download button */}
-            {downloadState.phase !== 'done' && (
+            {/* Action row: download or delete */}
+            <div className="flex items-center gap-3 flex-wrap">
               <button
-                onClick={handleDownload}
-                disabled={!managedModel || downloadState.phase === 'downloading'}
-                className="self-start px-4 py-2 rounded-lg text-sm font-medium bg-accent-primary text-white hover:opacity-90 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                onClick={() => electronAny.openModelsFolder()}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium border border-border-base bg-bg-surface text-text-main hover:border-accent-primary/50 transition-colors"
               >
-                {downloadState.phase === 'downloading' && <Loader className="w-4 h-4 animate-spin" />}
-                Herunterladen
+                <FolderOpen className="w-4 h-4" />
+                Ordner öffnen
               </button>
-            )}
+              {downloadState.phase !== 'done' && (
+                <button
+                  onClick={handleDownload}
+                  disabled={!managedModel || downloadState.phase === 'downloading'}
+                  className="px-4 py-2 rounded-lg text-sm font-medium bg-accent-primary text-white hover:opacity-90 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                >
+                  {downloadState.phase === 'downloading' && <Loader className="w-4 h-4 animate-spin" />}
+                  Herunterladen
+                </button>
+              )}
+
+              {downloadState.phase === 'done' && (
+                <>
+                  <span className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-semibold text-green-800 bg-green-50">
+                    <CheckCircle className="w-4 h-4" />
+                    Bereit
+                  </span>
+                  <button
+                    onClick={handleDelete}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium border border-red-300 text-red-600 hover:bg-red-50 transition-colors"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                    Modell löschen
+                  </button>
+                </>
+              )}
+            </div>
 
             {/* Progress bar */}
             {downloadState.phase === 'downloading' && (
@@ -404,14 +482,20 @@ export const StepAiBackend: React.FC<StepAiBackendProps> = ({
               </div>
             )}
 
-            {/* Done badge */}
-            {downloadState.phase === 'done' && (
-              <span
-                className="self-start flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-semibold text-green-800 bg-green-50"
-              >
-                <CheckCircle className="w-4 h-4" />
-                Bereit
-              </span>
+            {/* Error badge */}
+            {downloadState.phase === 'error' && (
+              <div className="flex flex-col gap-1">
+                <span className="flex items-center gap-1.5 text-sm text-red-600">
+                  <AlertCircle className="w-4 h-4 shrink-0" />
+                  Download fehlgeschlagen: {downloadState.message}
+                </span>
+                <button
+                  onClick={() => setDownloadState({ phase: 'idle' })}
+                  className="self-start text-xs text-text-subtle underline"
+                >
+                  Erneut versuchen
+                </button>
+              </div>
             )}
           </div>
         )}

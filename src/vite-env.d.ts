@@ -29,7 +29,10 @@ interface ElectronAPI {
   openLogFile: () => Promise<any>;
   openFileDialog: (options?: { filters?: { name: string; extensions: string[] }[] }) => Promise<string | null>;
   checkAiBackend: () => Promise<boolean>;
-  downloadModel: (modelKey: string) => Promise<any>;
+  downloadModel: (modelKey: string) => Promise<{ success: boolean; error?: string; filePath?: string }>;
+  checkModelDownloaded: (modelKey: string) => Promise<boolean>;
+  deleteModel: (modelKey: string) => Promise<{ success: boolean; error?: string }>;
+  openModelsFolder: () => Promise<void>;
   onDownloadProgress: (callback: (progress: {
     modelKey: string;
     downloadedBytes: number;

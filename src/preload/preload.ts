@@ -38,6 +38,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.invoke('open-file-dialog', options),
   checkAiBackend: () => ipcRenderer.invoke('check-ai-backend'),
   downloadModel: (modelKey: string) => ipcRenderer.invoke('download-model', modelKey),
+  checkModelDownloaded: (modelKey: string) => ipcRenderer.invoke('check-model-downloaded', modelKey),
+  deleteModel: (modelKey: string) => ipcRenderer.invoke('delete-model', modelKey),
+  openModelsFolder: () => ipcRenderer.invoke('open-models-folder'),
   onDownloadProgress: (callback: (progress: {
     modelKey: string;
     downloadedBytes: number;

@@ -2,6 +2,9 @@
 
 ## General
 
+- Do not write comments in code unless necessary
+- Do not write emoji in code
+- Keep code clean, tidy, and readable
 - Keep modules small and single-purpose. One service = one concern.
 - Fix root causes — never layer workarounds or add compatibility shims.
 - Do not mix main-process concerns with renderer concerns in one file.
@@ -85,6 +88,18 @@
 - `src/preload/` — contextBridge bridge only
 - `src/renderer/components/` — React UI components
 - `src/renderer/contexts/` — React context providers (theme, etc.)
+
+## KI-Dateiumbenennung
+
+- Von der KI vorgeschlagene Dateinamen sind **immer auf Deutsch**.
+- Pflichtformat: `JJMMTT_Absender_Thema(optional).pdf`
+  - `JJMMTT` = zweistelliges Jahr, Monat, Tag (z. B. `260517`)
+  - `Absender` = Absender des Dokuments (z. B. `Finanzamt`, `DHL`, `MusterGmbH`)
+  - `Thema` = optionales Schlagwort zum Inhalt (z. B. `Steuerbescheid`, `Rechnung`)
+  - Alle Bestandteile mit Unterstrich `_` verbunden
+- Alle generierten Namen müssen **UTF-8-konform** sein: keine Sonderzeichen
+  außer Umlauten (ä ö ü Ä Ö Ü ß), keine Leerzeichen, keine Schrägstriche.
+- Beispiele: `260517_Finanzamt_Steuerbescheid.pdf`, `260101_DHL_Paketankuendigung.pdf`
 
 ## Commit Style
 

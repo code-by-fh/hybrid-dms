@@ -1,11 +1,12 @@
-import { app, BrowserWindow, ipcMain, dialog, Tray, Menu, globalShortcut, nativeImage } from 'electron';
+import { app, BrowserWindow, ipcMain, dialog, shell, Tray, Menu, globalShortcut, nativeImage } from 'electron';
 import path from 'path';
 import fs from 'fs/promises';
+import { pathToFileURL } from 'url';
 import { initDb, getAllDocuments, setSetting, getDocumentByHash, updateDocumentMetadata, updateDocumentPath, updateDocumentStatus, searchDocuments } from './db/index.js';
 import { writeXmpMetadata } from './services/xmpService.js';
 import { startWatcher, runUuidCrawler, isCrawlerRunning, getConfig, processPendingDocuments } from './services/syncEngine.js';
 import { initLogger, getLogPath, setLogPath, log } from './services/logger.js';
-import { checkOllamaStatus, checkOllamaConfig, analyzeDocumentWithAI, checkAiBackend } from './services/aiService.js';
+import { checkOllamaStatus, checkOllamaConfig, analyzeDocumentWithAI, checkAiBackend, warmupGguf } from './services/aiService.js';
 import { performOCR } from './services/ocrService.js';
 import { PDFParse } from 'pdf-parse';
 import { createCanvas, Image } from 'canvas';
@@ -20,9 +21,10 @@ if (typeof global !== 'undefined') {
 }
 
 const MODEL_URLS: Record<string, string> = {
-  'gemma-4-4b-q4': 'https://huggingface.co/bartowski/google_gemma-4-4b-it-GGUF/resolve/main/google_gemma-4-4b-it-Q4_K_M.gguf',
-  'gemma-4-12b-q4': 'https://huggingface.co/bartowski/google_gemma-4-12b-it-GGUF/resolve/main/google_gemma-4-12b-it-Q4_K_M.gguf',
-  'llama-3.2-3b-q4': 'https://huggingface.co/bartowski/Llama-3.2-3B-Instruct-GGUF/resolve/main/Llama-3.2-3B-Instruct-Q4_K_M.gguf',
+  'gemma-3-4b-q4':   'https://huggingface.co/lmstudio-community/gemma-3-4b-it-GGUF/resolve/main/gemma-3-4b-it-Q4_K_M.gguf',
+  'qwen2.5-3b-q4':   'https://huggingface.co/bartowski/Qwen2.5-3B-Instruct-GGUF/resolve/main/Qwen2.5-3B-Instruct-Q4_K_M.gguf',
+  'qwen2.5-7b-q4':   'https://huggingface.co/bartowski/Qwen2.5-7B-Instruct-GGUF/resolve/main/Qwen2.5-7B-Instruct-Q4_K_M.gguf',
+  'phi-3.5-mini-q4': 'https://huggingface.co/bartowski/Phi-3.5-mini-instruct-GGUF/resolve/main/Phi-3.5-mini-instruct-Q4_K_M.gguf',
 };
 
 let mainWindow: BrowserWindow | null = null;
@@ -132,7 +134,7 @@ app.whenReady().then(async () => {
   // Configure pdfjs-dist worker globally (non-blocking)
   import('pdfjs-dist/legacy/build/pdf.mjs').then((pdfjsLib) => {
     const workerPath = path.join(app.getAppPath(), 'node_modules', 'pdfjs-dist', 'legacy', 'build', 'pdf.worker.mjs');
-    pdfjsLib.GlobalWorkerOptions.workerSrc = workerPath;
+    pdfjsLib.GlobalWorkerOptions.workerSrc = pathToFileURL(workerPath).href;
   }).catch((e) => {
     console.warn(`[Main] Failed to configure global pdfjs worker`, e);
   });
@@ -143,6 +145,9 @@ app.whenReady().then(async () => {
     console.warn('[Main] Tray creation failed (icon missing?):', e);
   }
   globalShortcut.register('CommandOrControl+Alt+D', createSearchWindow);
+
+  // Pre-warm GGUF model and context so the first document analysis doesn't pay the load cost
+  warmupGguf();
 
   // Run UUID crawler on startup (healing scan + first-time migration), then process pending
   runUuidCrawler(
@@ -470,19 +475,26 @@ ipcMain.handle('download-model', async (_event, modelKey: string) => {
   const modelsDir = path.join(app.getPath('userData'), 'dms-data', 'models');
   await fs.mkdir(modelsDir, { recursive: true });
 
-  const fileName = url.split('/').pop()!;
-  const destPath = path.join(modelsDir, fileName);
+  // Save under the stable key-based name so aiService.ts can locate it via
+  // path.join(userData, 'dms-data', 'models', AI_MODEL_NAME + '.gguf').
+  const destPath = path.join(modelsDir, modelKey + '.gguf');
 
+  let fileHandle: fs.FileHandle | null = null;
   try {
     const response = await fetch(url);
-    if (!response.ok || !response.body) throw new Error(`HTTP ${response.status}`);
+    if (!response.ok || !response.body) {
+      const msg = response.status === 401
+        ? 'HTTP 401 — Zugriff verweigert (Modell möglicherweise zugangsbeschränkt).'
+        : `HTTP ${response.status}`;
+      throw new Error(msg);
+    }
 
     const totalBytes = parseInt(response.headers.get('content-length') ?? '0', 10);
     let downloadedBytes = 0;
     let lastSpeedUpdate = Date.now();
     let bytesAtLastUpdate = 0;
 
-    const fileHandle = await fs.open(destPath, 'w');
+    fileHandle = await fs.open(destPath, 'w');
     const writer = fileHandle.createWriteStream();
 
     const reader = response.body.getReader();
@@ -511,9 +523,9 @@ ipcMain.handle('download-model', async (_event, modelKey: string) => {
       reader.releaseLock();
       writer.end();
       await fileHandle.close();
+      fileHandle = null;
     }
 
-    // Final progress event
     mainWindow?.webContents.send('download-progress', {
       modelKey,
       downloadedBytes,
@@ -524,9 +536,59 @@ ipcMain.handle('download-model', async (_event, modelKey: string) => {
 
     return { success: true, filePath: destPath };
   } catch (err) {
+    if (fileHandle) { try { await fileHandle.close(); } catch { /* ignore */ } }
+    try { await fs.unlink(destPath); } catch { /* partial file may not exist */ }
     log('error', `[download-model] Failed: ${(err as Error).message}`);
     return { success: false, error: (err as Error).message };
   }
+});
+
+ipcMain.handle('check-model-downloaded', async (_event, modelKey: string) => {
+  const url = MODEL_URLS[modelKey];
+  if (!url) return false;
+  const modelsDir = path.join(app.getPath('userData'), 'dms-data', 'models');
+  // Check for the key-based filename first (current naming convention).
+  // Also accept the old URL-basename name for backwards compatibility.
+  const keyPath = path.join(modelsDir, modelKey + '.gguf');
+  const legacyPath = path.join(modelsDir, url.split('/').pop()!);
+  try {
+    await fs.stat(keyPath);
+    return true;
+  } catch {
+    try {
+      await fs.stat(legacyPath);
+      // Rename to key-based name so future loads work correctly
+      await fs.rename(legacyPath, keyPath);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+});
+
+ipcMain.handle('delete-model', async (_event, modelKey: string) => {
+  const url = MODEL_URLS[modelKey];
+  if (!url) return { success: false, error: 'Unbekannter Modell-Schlüssel' };
+  const modelsDir = path.join(app.getPath('userData'), 'dms-data', 'models');
+  // Try key-based name first, fall back to legacy URL-basename name
+  const keyPath = path.join(modelsDir, modelKey + '.gguf');
+  const legacyPath = path.join(modelsDir, url.split('/').pop()!);
+  let filePath = keyPath;
+  try { await fs.stat(keyPath); } catch { filePath = legacyPath; }
+  try {
+    await fs.unlink(filePath);
+    log('info', `[delete-model] Deleted: ${filePath}`);
+    return { success: true };
+  } catch (err) {
+    log('error', `[delete-model] Failed: ${(err as Error).message}`);
+    return { success: false, error: (err as Error).message };
+  }
+});
+
+ipcMain.handle('open-models-folder', async () => {
+  const modelsDir = path.join(app.getPath('userData'), 'dms-data', 'models');
+  await fs.mkdir(modelsDir, { recursive: true });
+  await shell.openPath(modelsDir);
 });
 
 ipcMain.on('open-document-from-tray', (_event, uuid: string) => {

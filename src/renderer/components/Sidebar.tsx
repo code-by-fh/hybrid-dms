@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import type { DocumentType } from '../../App';
-import { X, Save, FileBox, Tag, User, Calendar, Cpu, LayoutGrid, RefreshCw, AlertCircle, FolderInput, Clock, FileText } from 'lucide-react';
+import { X, Save, FileBox, Tag, User, Calendar, Cpu, LayoutGrid, RefreshCw, AlertCircle, FolderInput, Clock, FileText, Pencil } from 'lucide-react';
 
 interface SidebarProps {
   document: DocumentType;
@@ -20,6 +20,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ document, isInbox, isArchive, 
   const [date, setDate] = useState<string>('');
   const [docType, setDocType] = useState<string>('');
   const [archivePath, setArchivePath] = useState<string>('');
+  const [customFilename, setCustomFilename] = useState<string>('');
   const [loading, setLoading] = useState(false);
 
   const isProcessing = document.status === 'ocr_processing' || document.status === 'ai_processing';
@@ -38,13 +39,33 @@ export const Sidebar: React.FC<SidebarProps> = ({ document, isInbox, isArchive, 
       setDate(parsedMeta.date || '');
       setDocType(parsedMeta.docType || '');
       setArchivePath(parsedMeta.archivePath || '');
+
+      const fileBaseName = document.last_path.split(/[\\/]/).pop() ?? '';
+      setCustomFilename(fileBaseName.replace(/\.[^.]+$/, ''));
     } catch (e) {
       console.error('Error parsing metadata', e);
     }
   }, [document]);
 
-  const handleSave = () => {
+  const handleSave = async () => {
     const tagsArray = tags.split(',').map(t => t.trim()).filter(Boolean);
+
+    const fileBaseName = document.last_path.split(/[\\/]/).pop() ?? '';
+    const originalName = fileBaseName.replace(/\.[^.]+$/, '');
+    const trimmedName = customFilename.trim();
+    if (!isInbox && !isArchive && trimmedName && trimmedName !== originalName) {
+      setLoading(true);
+      try {
+        const result = await window.electronAPI.renameFile({ hash: document.hash, newName: trimmedName });
+        if (!result.success) {
+          alert(`Umbenennen fehlgeschlagen: ${result.error}`);
+          return;
+        }
+      } finally {
+        setLoading(false);
+      }
+    }
+
     onSave(tagsArray, { sender, date, docType, archivePath });
   };
 
@@ -118,10 +139,34 @@ export const Sidebar: React.FC<SidebarProps> = ({ document, isInbox, isArchive, 
       </div>
 
       <div className="flex-1 overflow-y-auto overflow-x-hidden p-4 space-y-4">
-        {/* Filename badge */}
-        <div className="bg-bg-app border border-border-base rounded-lg px-3 py-2 text-xs text-text-subtle font-mono break-all">
-          {fileName}
-        </div>
+        {/* Filename badge / editable field */}
+        {!isInbox && !isArchive ? (
+          <div>
+            <label className="block text-xs font-semibold text-text-subtle uppercase tracking-wider mb-1 flex items-center">
+              <Pencil className="w-3.5 h-3.5 mr-1.5 text-accent-primary" /> Dateiname
+            </label>
+            <div className="flex items-center gap-1">
+              <input
+                type="text"
+                value={customFilename}
+                onChange={e => setCustomFilename(e.target.value)}
+                disabled={isProcessing}
+                className={inputClass + ' font-mono text-xs flex-1'}
+                placeholder="JJMMTT_Absender_Thema"
+              />
+              <span className="text-xs text-text-subtle font-mono shrink-0">.pdf</span>
+            </div>
+            {customFilename.trim() && (
+              <p className="text-xs text-text-subtle mt-1 font-mono break-all">
+                {customFilename.trim()}.pdf
+              </p>
+            )}
+          </div>
+        ) : (
+          <div className="bg-bg-app border border-border-base rounded-lg px-3 py-2 text-xs text-text-subtle font-mono break-all">
+            {fileName}
+          </div>
+        )}
 
         {/* PDF Viewer */}
         {onOpenPdf && (
