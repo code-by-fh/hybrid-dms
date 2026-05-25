@@ -228,6 +228,33 @@ async function analyzeWithOllama(text: string): Promise<AiAnalysisResult | null>
   }
 }
 
+// Inline JSON GBNF grammar — used as fallback when node-llama-cpp cannot locate
+// its grammars folder (e.g. asar/asarUnpack path mismatch in packaged Electron).
+const JSON_GBNF = `root   ::= object
+value  ::= object | array | string | number | ("true" | "false" | "null") ws
+
+object ::=
+  "{" ws (
+            string ":" ws value
+    ("," ws string ":" ws value)*
+  )? "}" ws
+
+array  ::=
+  "[" ws (
+            value
+    ("," ws value)*
+  )? "]" ws
+
+string ::=
+  "\\"" (
+    [^"\\\\\\x7F\\x00-\\x1F] |
+    "\\\\" (["\\\\bfnrt] | "u" [0-9a-fA-F]{4})
+  )* "\\"" ws
+
+number ::= ("-"? ([0-9] | [1-9] [0-9]{0,15})) ("." [0-9]+)? ([eE] [-+]? [0-9] [1-9]{0,15})? ws
+
+ws ::= | " " | "\\n" [ \\t]{0,20}`;
+
 // GGUF singletons — model, context, and grammar are loaded once and kept alive.
 // Concurrent model loading causes OOM (each 3B-Q4 model is ~2 GB), so we
 // serialize every inference through a queue.
@@ -258,7 +285,7 @@ async function loadGgufModelOnce(modelPath: string, forceCpu = false) {
 
   log('info', `[GGUF] loadGgufModelOnce: path=${modelPath}, effectiveForceCpu=${effectiveForceCpu}`);
 
-  const { getLlama, LlamaGrammar } = await import('node-llama-cpp');
+  const { getLlama, LlamaGrammar, LlamaText } = await import('node-llama-cpp');
 
   if (!_llama) {
     log('info', `[GGUF] Initializing llama instance (gpu=${!effectiveForceCpu})`);
@@ -266,13 +293,25 @@ async function loadGgufModelOnce(modelPath: string, forceCpu = false) {
     log('info', `[GGUF] Llama instance initialized`);
   }
 
-  // Build JSON grammar once per llama instance
+  // Build JSON grammar once per llama instance.
+  // Fallback to inline GBNF because in packaged Electron apps node-llama-cpp's
+  // getFor() cannot resolve its grammars folder via import.meta.url (asar path
+  // mismatch with app.asar.unpacked).
   if (!_ggufJsonGrammar) {
     try {
       _ggufJsonGrammar = await LlamaGrammar.getFor(_llama, 'json');
       log('info', `[GGUF] JSON grammar loaded`);
-    } catch (grammarErr) {
-      log('warn', `[GGUF] JSON grammar unavailable: ${grammarErr}`);
+    } catch {
+      try {
+        _ggufJsonGrammar = new LlamaGrammar(_llama, {
+          grammar: JSON_GBNF,
+          stopGenerationTriggers: [LlamaText(['\n\n\n\n'])],
+          trimWhitespaceSuffix: true,
+        });
+        log('info', `[GGUF] JSON grammar loaded from inline fallback`);
+      } catch (fallbackErr) {
+        log('warn', `[GGUF] JSON grammar unavailable: ${fallbackErr}`);
+      }
     }
   }
 
